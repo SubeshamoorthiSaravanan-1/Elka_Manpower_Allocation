@@ -1,0 +1,3 @@
+# Elkayem Auto Ancillaries - No external dependencies required
+# This app uses only Python Standard Library (http.server, sqlite3, json, etc.)
+# Created for Render.com deployment

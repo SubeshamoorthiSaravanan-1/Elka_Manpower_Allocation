@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: elkayem-api
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python server_advanced.py"
+    envVars:
+      - key: PORT
+        value: 8080

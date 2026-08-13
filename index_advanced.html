@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elkayem Auto – Manpower Allocation v3</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --primary:#e8a020;--primary-hover:#ffb830;
+      --dark-bg:#0d1b2a;--card-bg:#132840;--border:#1e4060;
+      --text:#e0e8f0;--text-muted:#90a8c0;
+      --success:#1a6e3a;--danger:#c04040;--warning:#d4900a;
+      --sidebar-w:260px;
+    }
+    [data-theme="light"]{
+      --dark-bg:#f0f4f8;--card-bg:#ffffff;--border:#c8d8e8;
+      --text:#1a2a3a;--text-muted:#5a7a9a;
+    }
+    body{font-family:'Segoe UI',Arial,sans-serif;background:var(--dark-bg);color:var(--text);min-height:100vh;transition:background .3s,color .3s;}
+    /* ── Sidebar ── */
+    .sidebar{position:fixed;left:0;top:0;width:var(--sidebar-w);height:100vh;background:linear-gradient(180deg,#071827 0%,#0d2640 100%);border-right:1px solid var(--border);padding:20px;overflow-y:auto;z-index:1000;transition:transform .3s;}
+    [data-theme="light"] .sidebar{background:linear-gradient(180deg,#1a3a5c,#1e4060);}
+    .sidebar-logo{background:var(--primary);color:#0d1b2a;padding:12px 16px;border-radius:8px;font-weight:800;margin-bottom:24px;text-align:center;font-size:1.1rem;letter-spacing:1px;}
+    .sidebar-nav{display:flex;flex-direction:column;gap:4px;}
+    .sidebar-nav button{background:transparent;border:none;color:#90a8c0;padding:11px 14px;border-radius:6px;cursor:pointer;font-size:0.88rem;transition:all .2s;text-align:left;font-family:inherit;display:flex;align-items:center;gap:10px;width:100%;}
+    .sidebar-nav button:hover{background:rgba(232,160,32,.12);color:var(--primary);}
+    .sidebar-nav button.active{background:rgba(232,160,32,.18);color:var(--primary);font-weight:700;border-left:3px solid var(--primary);}
+    .sidebar-nav i{width:18px;text-align:center;}
+    .sidebar-section{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#3a6080;padding:14px 14px 6px;margin-top:6px;}
+    .sidebar-footer{margin-top:auto;padding-top:16px;border-top:1px solid #1e4060;}
+    .user-badge{background:rgba(232,160,32,.1);padding:8px 12px;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:8px;}
+    .sidebar-bottom-btns{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+    /* ── Header ── */
+    header{background:linear-gradient(135deg,#132840,#0d2640);border-bottom:2px solid var(--primary);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;margin-left:var(--sidebar-w);position:sticky;top:0;z-index:900;}
+    [data-theme="light"] header{background:linear-gradient(135deg,#1a3a5c,#0d2640);}
+    header h1{font-size:1.15rem;font-weight:600;color:#fff;display:flex;align-items:center;gap:10px;}
+    .header-right{display:flex;align-items:center;gap:10px;}
+    .header-right input[type="search"]{background:var(--dark-bg);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-size:.85rem;width:200px;outline:none;}
+    .header-right input:focus{border-color:var(--primary);}
+    .theme-btn{background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .2s;}
+    .theme-btn:hover{border-color:var(--primary);color:var(--primary);}
+    /* ── Main ── */
+    main{margin-left:var(--sidebar-w);padding:24px;}
+    /* ── Cards ── */
+    .card{background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px;}
+    .card-title{font-size:.95rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:var(--primary);}
+    /* ── Control bar ── */
+    .control-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px;}
+    .field-group{display:flex;flex-direction:column;gap:5px;}
+    .field-group label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--primary);}
+    .field-group input,.field-group select,.field-group textarea{background:var(--dark-bg);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:6px;font-size:.88rem;font-family:inherit;outline:none;transition:border-color .2s;}
+    [data-theme="light"] .field-group input,[data-theme="light"] .field-group select{background:#f0f4f8;color:#1a2a3a;}
+    .field-group input:focus,.field-group select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(232,160,32,.1);}
+    /* ── Stats ── */
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px;}
+    .stat-box{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center;position:relative;overflow:hidden;}
+    .stat-box::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+    .stat-box.blue::before{background:#378add;}
+    .stat-box.green::before{background:#639922;}
+    .stat-box.amber::before{background:var(--primary);}
+    .stat-box.red::before{background:#c04040;}
+    .stat-box.purple::before{background:#7f77dd;}
+    .stat-value{font-size:1.8rem;font-weight:700;color:var(--primary);margin-bottom:3px;}
+    .stat-label{font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+    /* ── Table ── */
+    .table-responsive{overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;font-size:.84rem;}
+    thead tr{background:var(--dark-bg);}
+    [data-theme="light"] thead tr{background:#e0eaf4;}
+    thead th{padding:10px 12px;text-align:left;font-size:.71rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);border-bottom:2px solid var(--border);white-space:nowrap;}
+    tbody tr{border-bottom:1px solid var(--border);transition:background .15s;}
+    tbody tr:hover{background:rgba(232,160,32,.04);}
+    tbody tr.row-absent{background:rgba(192,64,64,.08);}
+    tbody tr.row-ot{background:rgba(232,160,32,.08);}
+    tbody tr.hidden-row{display:none;}
+    tbody td{padding:10px 12px;vertical-align:middle;}
+    td input.editable,td select.editable{background:transparent;border:1px solid transparent;color:var(--text);padding:4px 7px;border-radius:4px;width:100%;outline:none;transition:all .15s;font-family:inherit;font-size:.84rem;}
+    td input.editable:hover,td select.editable:hover{border-color:var(--border);}
+    td input.editable:focus,td select.editable:focus{border-color:var(--primary);background:var(--dark-bg);}
+    /* ── Buttons ── */
+    .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border:none;border-radius:6px;font-size:.84rem;font-weight:600;cursor:pointer;transition:all .2s;outline:none;font-family:inherit;}
+    .btn-primary{background:var(--primary);color:#0d1b2a;}
+    .btn-primary:hover{background:var(--primary-hover);transform:translateY(-1px);}
+    .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--text-muted);}
+    .btn-secondary:hover{border-color:var(--primary);color:var(--primary);}
+    .btn-danger{background:transparent;border:1px solid var(--danger);color:var(--danger);}
+    .btn-danger:hover{background:rgba(192,64,64,.1);}
+    .btn-success{background:var(--success);color:#fff;}
+    .btn-success:hover{background:#228a42;}
+    .btn-info{background:#185fa5;color:#fff;}
+    .btn-info:hover{background:#1a6eb8;}
+    .btn-sm{padding:5px 10px;font-size:.78rem;}
+    /* ── Badges ── */
+    .badge{display:inline-block;padding:3px 9px;border-radius:10px;font-size:.72rem;font-weight:700;}
+    .badge-pending{background:rgba(90,120,160,.2);color:#90a8c0;}
+    .badge-assigned{background:rgba(26,110,58,.2);color:#4db87a;}
+    .badge-completed{background:rgba(26,110,58,.35);color:#3da56a;}
+    .badge-absent{background:rgba(192,64,64,.2);color:#e07070;}
+    .badge-ot{background:rgba(232,160,32,.2);color:#e8a020;}
+    .badge-present{background:rgba(26,110,58,.2);color:#4db87a;}
+    .badge-late{background:rgba(212,144,10,.2);color:#d49010;}
+    /* ── Modal ── */
+    .modal{display:none;position:fixed;inset:0;background:rgba(8,16,28,.82);z-index:2000;align-items:center;justify-content:center;}
+    .modal.active{display:flex;}
+    .modal-content{background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:26px;max-width:520px;width:92%;max-height:90vh;overflow-y:auto;}
+    .modal-header{font-size:1.1rem;font-weight:700;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;}
+    .modal-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.4rem;line-height:1;transition:color .2s;}
+    .modal-close:hover{color:var(--danger);}
+    .modal-footer{display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
+    /* ── Attendance row ── */
+    .att-time{font-size:.78rem;color:var(--text-muted);}
+    /* ── OT badge ── */
+    .ot-input{width:60px!important;}
+    /* ── Toast ── */
+    #toast{position:fixed;bottom:28px;right:28px;background:var(--success);color:#fff;padding:12px 22px;border-radius:8px;font-size:.88rem;font-weight:600;display:none;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.3);animation:slideIn .3s ease-out;}
+    @keyframes slideIn{from{transform:translateX(360px);opacity:0}to{transform:translateX(0);opacity:1}}
+    /* ── Print ── */
+    @media print{
+      .sidebar,.header-right,.btn,.action-row,#toast,header{display:none!important;}
+      main{margin-left:0!important;}
+      .print-header{display:block!important;}
+      body{background:#fff!important;color:#000!important;}
+      .card{border:1px solid #ccc!important;background:#fff!important;}
+      table{font-size:11pt;}
+      thead th,tbody td{color:#000!important;}
+    }
+    .print-header{display:none;text-align:center;margin-bottom:16px;}
+    .print-header h2{font-size:16pt;font-weight:700;}
+    .print-header p{font-size:11pt;color:#444;}
+    /* ── Responsive ── */
+    .hamburger{display:none;background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;margin-right:10px;padding:8px;}
+    .hidden{display:none!important;}
+    .divider{border:none;border-top:1px solid var(--border);margin:16px 0;}
+    .remark-select{font-size:.75rem!important;padding:3px 6px!important;}
+    select option{background:var(--card-bg);}
+    .highlight-row td{background:rgba(232,160,32,.1)!important;}
+    
+    /* ════════════════════════════════════════ */
+    /* MOBILE RESPONSIVE DESIGN (< 768px)    */
+    /* ════════════════════════════════════════ */
+    @media(max-width:767px){
+      :root{--sidebar-w:0px;}
+      
+      /* Sidebar - Hide by default, overlay when open */
+      .sidebar{
+        transform:translateX(-100%);
+        width:260px;
+        position:fixed;
+        top:0;
+        left:0;
+        height:100vh;
+        box-shadow:-2px 0 8px rgba(0,0,0,.3);
+      }
+      .sidebar.open{transform:translateX(0);}
+      
+      /* Main layout */
+      main,header{margin-left:0;}
+      .hamburger{display:flex!important;}
+      header h1{font-size:1rem;}
+      
+      /* Header adjustments */
+      header{
+        flex-wrap:wrap;
+        gap:10px;
+        padding:10px 14px;
+      }
+      .header-right{
+        width:100%;
+        justify-content:space-between;
+      }
+      .header-right input[type="search"]{
+        width:100%;
+        flex:1;
+      }
+      
+      /* Card spacing */
+      .card{padding:16px;margin-bottom:16px;}
+      main{padding:12px;}
+      
+      /* Control bar - Stack on mobile */
+      .control-bar{
+        grid-template-columns:1fr;
+        gap:10px;
+      }
+      .control-bar>div:last-child{
+        flex-direction:column;
+      }
+      .control-bar>div:last-child .btn{
+        width:100%;
+        justify-content:center;
+      }
+      
+      /* Stats grid */
+      .stats-grid{
+        grid-template-columns:repeat(2,1fr);
+        gap:10px;
+      }
+      .stat-box{padding:12px;}
+      .stat-value{font-size:1.4rem;}
+      .stat-label{font-size:.65rem;}
+      
+      /* Button sizing */
+      .btn{
+        padding:7px 12px;
+        font-size:.80rem;
+        width:100%;
+        justify-content:center;
+      }
+      .btn-sm{padding:5px 10px;}
+      .action-row{
+        flex-direction:column;
+      }
+      .action-row>div{
+        display:flex;
+        flex-direction:column;
+        width:100%;
+      }
+      .action-row .btn{width:100%;}
+      
+      /* Table - Horizontal scroll */
+      .table-responsive{
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+      }
+      table{font-size:.75rem;}
+      thead th{
+        padding:8px;
+        font-size:.65rem;
+      }
+      tbody td{
+        padding:8px;
+        font-size:.75rem;
+      }
+      
+      /* Form inputs */
+      .field-group input,
+      .field-group select,
+      .field-group textarea{
+        padding:7px 10px;
+        font-size:.85rem;
+      }
+      
+      /* Modal */
+      .modal-content{
+        width:95%;
+        padding:20px;
+      }
+      
+      /* Badge */
+      .badge{padding:3px 7px;font-size:.68rem;}
+      
+      /* Print header */
+      .print-header h2{font-size:14pt;}
+      .print-header p{font-size:10pt;}
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* TABLET RESPONSIVE DESIGN (768px-1024px) */
+    /* ════════════════════════════════════════ */
+    @media(min-width:768px) and (max-width:1024px){
+      :root{--sidebar-w:200px;}
+      
+      /* Compact sidebar */
+      .sidebar{
+        width:200px;
+        padding:16px;
+      }
+      .sidebar-logo{
+        padding:10px 12px;
+        font-size:1rem;
+      }
+      .sidebar-nav button{
+        padding:9px 12px;
+        font-size:.84rem;
+      }
+      
+      /* Header */
+      header{
+        padding:12px 20px;
+        gap:8px;
+      }
+      header h1{font-size:1rem;}
+      .header-right input[type="search"]{
+        width:150px;
+      }
+      
+      /* Main area */
+      main{
+        margin-left:200px;
+        padding:16px;
+      }
+      
+      /* Control bar - 2 columns */
+      .control-bar{
+        grid-template-columns:repeat(2,1fr);
+      }
+      
+      /* Stats grid */
+      .stats-grid{
+        grid-template-columns:repeat(2,1fr);
+      }
+      
+      /* Card */
+      .card{padding:16px;}
+      .card-title{font-size:.90rem;}
+      
+      /* Button */
+      .btn{padding:7px 13px;font-size:.82rem;}
+      
+      /* Table */
+      table{font-size:.82rem;}
+      thead th{padding:9px 10px;font-size:.70rem;}
+      tbody td{padding:9px 10px;}
+      
+      /* Action row - wrap buttons */
+      .action-row{
+        gap:8px;
+      }
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* DESKTOP RESPONSIVE DESIGN (> 1024px)   */
+    /* ════════════════════════════════════════ */
+    @media(min-width:1025px){
+      /* Full sidebar */
+      .sidebar{width:260px;}
+      main{margin-left:260px;}
+      
+      /* Control bar - full responsive */
+      .control-bar{
+        grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+      }
+      
+      /* Stats grid */
+      .stats-grid{
+        grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+      }
+      
+      /* Hover effects */
+      .btn:hover{
+        transform:translateY(-2px);
+        box-shadow:0 2px 8px rgba(232,160,32,.2);
+      }
+      
+      table tbody tr:hover{
+        background:rgba(232,160,32,.06);
+      }
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* EXTRA SMALL DEVICES (< 480px)          */
+    /* ════════════════════════════════════════ */
+    @media(max-width:479px){
+      body{font-size:13px;}
+      header h1{font-size:.9rem;}
+      .sidebar-logo{font-size:.95rem;padding:10px 12px;}
+      .card-title{font-size:.85rem;}
+      .stat-value{font-size:1.2rem;}
+      .btn{padding:6px 10px;font-size:.75rem;}
+      
+      /* Hide less important elements */
+      .theme-btn{display:none;}
+      
+      /* Table - show only essential columns */
+      thead th:nth-child(n+7){
+        display:none;
+      }
+      tbody td:nth-child(n+7){
+        display:none;
+      }
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* LANDSCAPE MODE (Mobile)                 */
+    /* ════════════════════════════════════════ */
+    @media(max-height:500px) and (orientation:landscape){
+      header{padding:8px 12px;}
+      main{padding:8px;}
+      .card{padding:12px;margin-bottom:12px;}
+      .control-bar{gap:8px;}
+      .stats-grid{gap:8px;}
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* HIGH RESOLUTION DISPLAYS (> 1920px)    */
+    /* ════════════════════════════════════════ */
+    @media(min-width:1920px){
+      body{font-size:16px;}
+      .sidebar{width:280px;}
+      main{margin-left:280px;}
+      .card{padding:24px;}
+      .btn{padding:10px 18px;font-size:.90rem;}
+      .stat-value{font-size:2rem;}
+      table{font-size:.90rem;}
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* TOUCH DEVICE IMPROVEMENTS              */
+    /* ════════════════════════════════════════ */
+    @media(hover:none) and (pointer:coarse){
+      /* Larger touch targets */
+      .btn{min-height:44px;min-width:44px;}
+      .sidebar-nav button{min-height:44px;}
+      
+      /* Better spacing for touch */
+      table tbody tr{padding:8px 0;}
+      
+      /* Remove hover transforms */
+      .btn:hover{transform:none;}
+    }
+    
+    /* ════════════════════════════════════════ */
+    /* PRINT STYLESHEET IMPROVEMENTS          */
+    /* ════════════════════════════════════════ */
+    @media print{
+      .sidebar,.header-right,.btn,.action-row,#toast,header{
+        display:none!important;
+      }
+      main{
+        margin-left:0!important;
+        padding:0!important;
+      }
+      .print-header{display:block!important;}
+      body{
+        background:#fff!important;
+        color:#000!important;
+        font-size:11pt;
+      }
+      .card{
+        border:1px solid #ccc!important;
+        background:#fff!important;
+        page-break-inside:avoid;
+      }
+      table{font-size:10pt;width:100%;}
+      thead th,tbody td{
+        color:#000!important;
+        border:1px solid #999;
+      }
+      tbody tr:hover{background:#fff!important;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-logo"><i class="fas fa-industry"></i> ELKAYEM</div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">Main</div>
+    <button onclick="switchTab('allocation')" class="active" id="nav-allocation"><i class="fas fa-tasks"></i> Allocation</button>
+    <button onclick="switchTab('attendance')" id="nav-attendance"><i class="fas fa-user-clock"></i> Attendance</button>
+    <button onclick="switchTab('overtime')" id="nav-overtime"><i class="fas fa-business-time"></i> Overtime</button>
+    <div class="sidebar-section">Data</div>
+    <button onclick="switchTab('employees')" id="nav-employees"><i class="fas fa-users"></i> Employees</button>
+    <button onclick="switchTab('analytics')" id="nav-analytics"><i class="fas fa-chart-bar"></i> Analytics</button>
+    <button onclick="switchTab('history')" id="nav-history"><i class="fas fa-history"></i> History</button>
+    <div class="sidebar-section">System</div>
+    <button onclick="switchTab('settings')" id="nav-settings"><i class="fas fa-cog"></i> Settings</button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-badge"><i class="fas fa-user-circle"></i><span id="userDisplay">Admin</span></div>
+    <div class="sidebar-bottom-btns">
+      <button onclick="toggleTheme()" class="btn btn-secondary btn-sm"><i class="fas fa-adjust"></i> Toggle Theme</button>
+      <button onclick="logout()" style="background:rgba(192,64,64,.12);border:none;color:var(--danger);padding:8px 12px;border-radius:6px;cursor:pointer;font-size:.84rem;font-family:inherit;display:flex;align-items:center;gap:8px;"><i class="fas fa-sign-out-alt"></i> Logout</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>
+    <button class="hamburger" id="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')"><i class="fas fa-bars"></i></button>
+    <i class="fas fa-industry"></i> Elkayem Manpower Allocation
+  </h1>
+  <div class="header-right">
+    <input type="search" id="globalSearch" placeholder="Search name or process…" oninput="liveSearch(this.value)" />
+    <button class="theme-btn" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
+  </div>
+</header>
+
+<main>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: ALLOCATION                                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-allocation" class="tab-content">
+  <div class="print-header">
+    <h2>MAN POWER ALLOCATION SHEET</h2>
+    <p id="print-subtitle"></p>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-clipboard-list"></i> Manpower Allocation</div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Cell / Line</label>
+        <select id="cellSelect">
+          <option value="">-- Select a Line --</option>
+          <option value="1">Cell 1 – N360 Swingarm</option>
+          <option value="2">Cell 2 – XL100 & U358 Swingarm</option>
+          <option value="3">Cell 3 – HLX & U237 Swingarm</option>
+          <option value="4">Cell 4 – U347 Swingarm</option>
+          <option value="5">Cell 5 – Sports & U223 Swingarm</option>
+          <option value="6">Cell 6 – Sports Swingarm Line-2</option>
+          <option value="7">Cell 7 – U546 Swingarm</option>
+          <option value="8">Cell 8 – U359 Swingarm</option>
+          <option value="9">Cell 9 – HLX125 & Star Swingarm Line-2</option>
+          <option value="10">Cell 10 – U347 Swingarm Line-2</option>
+          <option value="11">Cell 11 – Custom Line</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Date</label>
+        <input type="date" id="allocationDate" />
+      </div>
+      <div class="field-group">
+        <label>Month</label>
+        <input type="month" id="allocationMonth" />
+      </div>
+      <div class="field-group">
+        <label>Shift</label>
+        <select id="allocationShift">
+          <option value="1">Shift 1</option>
+          <option value="2">Shift 2</option>
+          <option value="3">Shift 3</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end;display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="loadAllocation()"><i class="fas fa-search"></i> Load</button>
+        <button class="btn btn-secondary" onclick="clearNames()"><i class="fas fa-eraser"></i> Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid"></div>
+
+  <!-- Allocation Table -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div class="card-title" style="margin:0"><i class="fas fa-table"></i> <span id="cellLabel">Select a cell</span></div>
+      <span class="badge badge-assigned" id="totalBadge">0 rows</span>
+    </div>
+    <div class="table-responsive">
+      <table id="allocationTable">
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Process Name</th>
+            <th>Category</th>
+            <th style="text-align:center">Plan</th>
+            <th style="min-width:160px">Assigned Employee</th>
+            <th>Remark</th>
+            <th>Status</th>
+            <th style="text-align:center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="allocationBody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)"><i class="fas fa-arrow-up"></i> Select a Cell and click Load</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="action-row" style="margin-top:14px;display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;">
+      <button class="btn btn-secondary" onclick="addAllocationRow()"><i class="fas fa-plus"></i> Add Row</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="saveAllocation()"><i class="fas fa-save"></i> Save</button>
+        <button class="btn btn-info" onclick="downloadSingleSheet()"><i class="fas fa-download"></i> Download Sheet</button>
+        <button class="btn btn-secondary" onclick="exportAllocationExcel()"><i class="fas fa-file-excel"></i> Export Excel</button>
+        <button class="btn btn-secondary" onclick="printSheet()"><i class="fas fa-print"></i> Print</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: ATTENDANCE                                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-attendance" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-user-clock"></i> Daily Attendance</div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Date</label>
+        <input type="date" id="attDate" />
+      </div>
+      <div class="field-group">
+        <label>Shift</label>
+        <select id="attShift">
+          <option value="1">Shift 1</option>
+          <option value="2">Shift 2</option>
+          <option value="3">Shift 3</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end;">
+        <button class="btn btn-primary" onclick="loadAttendance()"><i class="fas fa-search"></i> Load</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="attStats"></div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-list-check"></i> Attendance Sheet</div>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Employee Name</th>
+            <th>Process</th>
+            <th>Cell</th>
+            <th>Clock In</th>
+            <th>Clock Out</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="attBody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Load attendance to begin</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn-success" onclick="saveAttendance()"><i class="fas fa-save"></i> Save Attendance</button>
+      <button class="btn btn-secondary" onclick="exportAttendanceExcel()"><i class="fas fa-file-excel"></i> Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: OVERTIME                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-overtime" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-business-time"></i> Overtime Tracker</div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Week / Month</label>
+        <input type="month" id="otMonth" />
+      </div>
+      <div class="field-group">
+        <label>Filter Cell</label>
+        <select id="otCellFilter">
+          <option value="">All Cells</option>
+          <option value="1">Cell 1</option><option value="2">Cell 2</option>
+          <option value="3">Cell 3</option><option value="4">Cell 4</option>
+          <option value="5">Cell 5</option><option value="6">Cell 6</option>
+          <option value="7">Cell 7</option><option value="8">Cell 8</option>
+          <option value="9">Cell 9</option><option value="10">Cell 10</option>
+          <option value="11">Cell 11</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end;">
+        <button class="btn btn-primary" onclick="loadOT()"><i class="fas fa-search"></i> Load</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="otStats"></div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-clock"></i> OT Log</div>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Employee</th>
+            <th>Cell</th>
+            <th>Date</th>
+            <th>OT Hours</th>
+            <th>Reason</th>
+            <th>Approved</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="otBody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Load OT data to begin</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;justify-content:space-between;">
+      <button class="btn btn-secondary" onclick="addOTRow()"><i class="fas fa-plus"></i> Add OT Entry</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-success" onclick="saveOT()"><i class="fas fa-save"></i> Save</button>
+        <button class="btn btn-secondary" onclick="exportOTExcel()"><i class="fas fa-file-excel"></i> Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: EMPLOYEES                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-employees" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-users"></i> Employee Database</div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="openEmployeeModal()"><i class="fas fa-user-plus"></i> Add Employee</button>
+      <input type="search" placeholder="Search employees…" oninput="filterEmployees(this.value)" style="background:var(--dark-bg);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-size:.85rem;flex:1;min-width:160px;outline:none;" />
+    </div>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Name</th><th>Category</th><th>Phone</th><th>Status</th><th>Action</th></tr>
+        </thead>
+        <tbody id="employeeBody">
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">No employees loaded</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: ANALYTICS                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-analytics" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-chart-bar"></i> Analytics Overview</div>
+    <div class="stats-grid">
+      <div class="stat-box blue"><div class="stat-value" id="an-employees">0</div><div class="stat-label">Total Employees</div></div>
+      <div class="stat-box green"><div class="stat-value" id="an-today">0</div><div class="stat-label">Allocated Today</div></div>
+      <div class="stat-box amber"><div class="stat-value" id="an-util">0%</div><div class="stat-label">Utilisation</div></div>
+      <div class="stat-box purple"><div class="stat-value" id="an-ot">0 hrs</div><div class="stat-label">OT This Month</div></div>
+      <div class="stat-box red"><div class="stat-value" id="an-absent">0</div><div class="stat-label">Absent Today</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-table"></i> Cell Utilisation Summary</div>
+    <div class="table-responsive">
+      <table>
+        <thead><tr><th>Cell</th><th>Total Positions</th><th>Filled</th><th>Vacant</th><th>Utilisation</th></tr></thead>
+        <tbody id="analyticsBody">
+          <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted)">Load allocation data first</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: HISTORY                                              -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-history" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-history"></i> Allocation History</div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Date</label>
+        <input type="date" id="historyDate" />
+      </div>
+      <div class="field-group">
+        <label>Cell</label>
+        <select id="historyCellFilter">
+          <option value="">All Cells</option>
+          <option value="1">Cell 1</option><option value="2">Cell 2</option>
+          <option value="3">Cell 3</option><option value="4">Cell 4</option>
+          <option value="5">Cell 5</option><option value="6">Cell 6</option>
+          <option value="7">Cell 7</option><option value="8">Cell 8</option>
+          <option value="9">Cell 9</option><option value="10">Cell 10</option>
+          <option value="11">Cell 11</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end;">
+        <button class="btn btn-primary" onclick="loadHistory()"><i class="fas fa-search"></i> Load</button>
+      </div>
+    </div>
+    <div class="table-responsive" style="margin-top:4px;">
+      <table>
+        <thead><tr><th>Date</th><th>Cell</th><th>Employee</th><th>Process</th><th>Shift</th><th>Status</th></tr></thead>
+        <tbody id="historyBody">
+          <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">No history yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: SETTINGS                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-settings" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-cog"></i> Settings</div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Company Name</label>
+        <input type="text" id="companyName" value="Elkayem Auto Ancillaries Pvt Ltd" />
+      </div>
+      <div class="field-group">
+        <label>Default Shift</label>
+        <select id="defaultShift">
+          <option value="1">Shift 1</option>
+          <option value="2">Shift 2</option>
+          <option value="3">Shift 3</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Theme</label>
+        <select id="themeSelect" onchange="applyTheme(this.value)">
+          <option value="dark">Dark Mode</option>
+          <option value="light">Light Mode</option>
+        </select>
+      </div>
+    </div>
+    <hr class="divider" />
+    <div class="card-title"><i class="fas fa-shield-alt"></i> Data Management</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> Save Settings</button>
+      <button class="btn btn-secondary" onclick="exportAllData()"><i class="fas fa-database"></i> Export All Data</button>
+      <button class="btn btn-danger" onclick="clearLocalData()"><i class="fas fa-trash"></i> Clear Local Data</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- Employee Modal -->
+<div id="employeeModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span><i class="fas fa-user-plus"></i> Add / Edit Employee</span>
+      <button class="modal-close" onclick="closeEmployeeModal()">&times;</button>
+    </div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Name</label>
+        <input type="text" id="empName" placeholder="Full name" />
+      </div>
+      <div class="field-group">
+        <label>Category</label>
+        <select id="empCategory">
+          <option value="Robot Op">Robot Operator</option>
+          <option value="Welder">Welder</option>
+          <option value="Helper">Helper</option>
+          <option value="Operator">Operator</option>
+          <option value="SPM Rotary">SPM Rotary</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Phone</label>
+        <input type="tel" id="empPhone" placeholder="+91 XXXXX XXXXX" />
+      </div>
+      <div class="field-group">
+        <label>Status</label>
+        <select id="empStatus">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="leave">On Leave</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeEmployeeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEmployee()"><i class="fas fa-save"></i> Save Employee</button>
+    </div>
+  </div>
+</div>
+
+<!-- Login Modal (dynamically inserted) -->
+<div id="toast"></div>
+
+<!-- SheetJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CELL DEFINITIONS – All 11 Lines (full process lists)
+// ════════════════════════════════════════════════════════════
+const CELLS = {
+  "1":{ label:"Cell 1 – N360 Swingarm", processes:[
+    {process:"Top & Bottom Welding",category:"Robot Op",plan:1},
+    {process:"Mono Shock Absorber Welding",category:"Robot Op",plan:1},
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage II",category:"Robot Op",plan:1},
+    {process:"Welding Stage II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III",category:"Robot Op",plan:1},
+    {process:"Welding Stage IV",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Rework Welding",category:"Welder",plan:1},
+    {process:"Rework Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Visual Inspection",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Material Moving",category:"Helper",plan:1},
+  ]},
+  "2":{ label:"Cell 2 – XL100 & U358 Swingarm", processes:[
+    {process:"Sub Assembly Welding",category:"Robot Op",plan:1},
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage II & III",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring",category:"Operator",plan:1},
+  ]},
+  "3":{ label:"Cell 3 – HLX & U237 Swingarm", processes:[
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III & IV",category:"Robot Op",plan:1},
+    {process:"Welding Stage V",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring",category:"Operator",plan:1},
+  ]},
+  "4":{ label:"Cell 4 – U347 Swingarm", processes:[
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III",category:"Robot Op",plan:1},
+    {process:"Welding Stage IV",category:"Robot Op",plan:1},
+    {process:"Full Welding-I",category:"Welder",plan:1},
+    {process:"Full Welding-II",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring M/C-Speparmac 3",category:"Operator",plan:1},
+    {process:"Rework Area",category:"Helper",plan:1},
+  ]},
+  "5":{ label:"Cell 5 – Sports & U223 Swingarm", processes:[
+    {process:"Welding Stage I & II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III & IV",category:"Robot Op",plan:1},
+    {process:"Sub Assy Welding",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring M/C-Taurus",category:"Operator",plan:1},
+  ]},
+  "6":{ label:"Cell 6 – Sports Swingarm Line-2", processes:[
+    {process:"Welding Stage I & II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III & IV",category:"Robot Op",plan:1},
+    {process:"Sub Assy Welding",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+  ]},
+  "7":{ label:"Cell 7 – U546 Swingarm", processes:[
+    {process:"Subassy Welding-I",category:"Robot Op",plan:1},
+    {process:"Subassy Welding-II",category:"SPM Rotary",plan:1},
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage I",category:"Welder",plan:1},
+    {process:"Welding Stage II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring M/C-Speparmac 1",category:"Operator",plan:1},
+  ]},
+  "8":{ label:"Cell 8 – U359 Swingarm", processes:[
+    {process:"Welding Stage I & II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III & IV",category:"Robot Op",plan:1},
+    {process:"Welding Stage V",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring",category:"Operator",plan:1},
+  ]},
+  "9":{ label:"Cell 9 – HLX125 & Star Swingarm Line-2", processes:[
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Welding Stage II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III & IV",category:"Robot Op",plan:1},
+    {process:"Welding Stage V",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+  ]},
+  "10":{ label:"Cell 10 – U347 Swingarm Line-2", processes:[
+    {process:"Welding Stage I & II",category:"Robot Op",plan:1},
+    {process:"Welding Stage III, IV, V & Sub Assy Welding",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising & Final Gauge Inspection",category:"Operator",plan:1},
+  ]},
+  "11":{ label:"Cell 11 – Custom Line", processes:[
+    {process:"Welding Stage I",category:"Robot Op",plan:1},
+    {process:"Full Welding",category:"Welder",plan:1},
+    {process:"Spatter Cleaning",category:"Helper",plan:1},
+    {process:"Revising",category:"Operator",plan:1},
+    {process:"Final Gauge Inspection",category:"Operator",plan:1},
+    {process:"Boring",category:"Operator",plan:1},
+  ]},
+};
+
+// ════════════════════════════════════════════════════════════
+// APP STATE
+// ════════════════════════════════════════════════════════════
+const API_BASE='http://localhost:8080/api';
+let appState={
+  currentUser:null, currentTab:'allocation',
+  allocations:[], employees:[], history:[],
+  attendance:[], otLogs:[], token:null
+};
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  const today=new Date().toISOString().split('T')[0];
+  const month=today.slice(0,7);
+  document.getElementById('allocationDate').value=today;
+  document.getElementById('allocationMonth').value=month;
+  document.getElementById('historyDate').value=today;
+  document.getElementById('attDate').value=today;
+  document.getElementById('otMonth').value=month;
+
+  // Load theme
+  const theme=localStorage.getItem('elkTheme')||'dark';
+  applyTheme(theme);
+
+  const token=localStorage.getItem('token');
+  const user=localStorage.getItem('user');
+  if(!token||!user){ showLoginModal(); }
+  else{
+    appState.token=token;
+    appState.currentUser=JSON.parse(user);
+    document.getElementById('userDisplay').textContent=appState.currentUser.username;
+    loadEmployeesLocal();
+    updateAnalytics();
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// THEME
+// ════════════════════════════════════════════════════════════
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  localStorage.setItem('elkTheme',t);
+  const sel=document.getElementById('themeSelect');
+  if(sel) sel.value=t;
+  const icon=document.querySelector('.theme-btn i');
+  if(icon) icon.className=t==='dark'?'fas fa-sun':'fas fa-moon';
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  applyTheme(cur==='dark'?'light':'dark');
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════
+function showLoginModal(){
+  const m=document.createElement('div');
+  m.className='modal active'; m.id='loginModalElement';
+  m.innerHTML=`
+  <div class="modal-content" style="max-width:380px;">
+    <div class="modal-header">
+      <span><i class="fas fa-lock"></i> Sign In – Elkayem</span>
+      <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+    </div>
+    <div class="control-bar">
+      <div class="field-group"><label>Username</label><input type="text" id="loginUsername" placeholder="Enter username" /></div>
+      <div class="field-group"><label>Password</label><input type="password" id="loginPassword" placeholder="Enter password" onkeydown="if(event.key==='Enter')performLogin()" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="performLogin()"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  setTimeout(()=>document.getElementById('loginUsername')&&document.getElementById('loginUsername').focus(),100);
+}
+async function performLogin(){
+  const u=document.getElementById('loginUsername').value.trim();
+  const p=document.getElementById('loginPassword').value;
+  if(!u||!p){showToast('Enter username and password','danger');return;}
+  try{
+    const res=await fetch(`${API_BASE}/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(res.ok){
+      const data=await res.json();
+      localStorage.setItem('token',data.token);
+      localStorage.setItem('user',JSON.stringify(data.user));
+      appState.token=data.token; appState.currentUser=data.user;
+      document.getElementById('userDisplay').textContent=data.user.username;
+      document.getElementById('loginModalElement').remove();
+      loadEmployeesLocal(); updateAnalytics();
+      showToast('Welcome, '+data.user.username+'!','success');
+    } else { showToast('Invalid credentials','danger'); }
+  } catch(e){ showToast('Server offline – working in offline mode','warning'); closeLoginModal(); }
+}
+function closeLoginModal(){const m=document.getElementById('loginModalElement');if(m)m.remove();}
+function logout(){localStorage.removeItem('token');localStorage.removeItem('user');location.reload();}
+
+// ════════════════════════════════════════════════════════════
+// TAB NAV
+// ════════════════════════════════════════════════════════════
+function switchTab(tab){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.getElementById('tab-'+tab).classList.remove('hidden');
+  document.querySelectorAll('.sidebar-nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('nav-'+tab).classList.add('active');
+  appState.currentTab=tab;
+  // Auto-close sidebar on mobile when menu option is clicked
+  document.getElementById('sidebar').classList.remove('open');
+  if(tab==='analytics') updateAnalytics();
+  if(tab==='employees') renderEmployeeTable();
+}
+
+// ════════════════════════════════════════════════════════════
+// LIVE SEARCH
+// ════════════════════════════════════════════════════════════
+function liveSearch(q){
+  const rows=document.querySelectorAll('#allocationBody tr');
+  q=q.toLowerCase().trim();
+  rows.forEach(r=>{
+    if(!q){r.classList.remove('hidden-row','highlight-row');return;}
+    const txt=r.innerText.toLowerCase();
+    if(txt.includes(q)){r.classList.remove('hidden-row');r.classList.add('highlight-row');}
+    else{r.classList.add('hidden-row');r.classList.remove('highlight-row');}
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ALLOCATION
+// ════════════════════════════════════════════════════════════
+function loadAllocation(){
+  const cellId=document.getElementById('cellSelect').value;
+  if(!cellId){showToast('Select a Cell first','warning');return;}
+  const cell=CELLS[cellId];
+  const date=document.getElementById('allocationDate').value;
+  const shift=document.getElementById('allocationShift').value;
+
+  // Try load saved data from localStorage
+  const key=`alloc_${cellId}_${date}_${shift}`;
+  const saved=JSON.parse(localStorage.getItem(key)||'null');
+
+  appState.allocations=cell.processes.map((p,i)=>({
+    id:i, sno:i+1,
+    process:p.process, category:p.category, plan:p.plan,
+    assigned: saved&&saved[i] ? saved[i].assigned : '',
+    remark:   saved&&saved[i] ? saved[i].remark   : '',
+    status:   saved&&saved[i] ? saved[i].status    : 'pending',
+    clockIn:'', clockOut:'',
+    cellId:cellId, date:date, shift:shift,
+  }));
+
+  document.getElementById('cellLabel').textContent=cell.label;
+  document.getElementById('print-subtitle').textContent=cell.label+' | Date: '+date+' | Shift: '+shift;
+  renderAllocationTable();
+  updateStats();
+  showToast('Loaded '+cell.label,'success');
+
+  // Push to history
+  pushHistory(cellId, date, shift);
+}
+
+function renderAllocationTable(){
+  const tbody=document.getElementById('allocationBody');
+  if(!appState.allocations.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">No rows</td></tr>';return;}
+  document.getElementById('totalBadge').textContent=appState.allocations.length+' rows';
+  tbody.innerHTML=appState.allocations.map((row,i)=>{
+    const remarkClass=row.remark==='Absent'?'row-absent':row.remark==='OT'?'row-ot':'';
+    return `<tr class="${remarkClass}" id="arow-${i}">
+      <td style="color:var(--text-muted);font-weight:600;">${row.sno}</td>
+      <td><strong>${escH(row.process)}</strong></td>
+      <td><span class="badge badge-pending">${escH(row.category)}</span></td>
+      <td style="text-align:center;font-weight:700;color:var(--primary);">${row.plan}</td>
+      <td><input type="text" class="editable" value="${escH(row.assigned)}"
+          onchange="appState.allocations[${i}].assigned=this.value;updateStats();"
+          placeholder="Enter name…" /></td>
+      <td>
+        <select class="editable remark-select" onchange="appState.allocations[${i}].remark=this.value;applyRemarkStyle(${i},this.value);">
+          <option value="" ${!row.remark?'selected':''}>–</option>
+          <option value="Present" ${row.remark==='Present'?'selected':''}>Present</option>
+          <option value="Absent"  ${row.remark==='Absent'?'selected':''}>Absent</option>
+          <option value="Late"    ${row.remark==='Late'?'selected':''}>Late</option>
+          <option value="OT"      ${row.remark==='OT'?'selected':''}>OT</option>
+          <option value="Leave"   ${row.remark==='Leave'?'selected':''}>Leave</option>
+          <option value="Temp"    ${row.remark==='Temp'?'selected':''}>Temp</option>
+        </select>
+      </td>
+      <td>
+        <select class="editable" onchange="appState.allocations[${i}].status=this.value;updateStats();">
+          <option value="pending"   ${row.status==='pending'?'selected':''}>Pending</option>
+          <option value="assigned"  ${row.status==='assigned'?'selected':''}>Assigned</option>
+          <option value="completed" ${row.status==='completed'?'selected':''}>Completed</option>
+        </select>
+      </td>
+      <td style="text-align:center;">
+        <button class="btn btn-sm btn-danger" onclick="deleteAllocationRow(${i})"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function applyRemarkStyle(i,val){
+  const tr=document.getElementById('arow-'+i);
+  if(!tr) return;
+  tr.classList.remove('row-absent','row-ot');
+  if(val==='Absent') tr.classList.add('row-absent');
+  if(val==='OT') tr.classList.add('row-ot');
+}
+
+function addAllocationRow(){
+  const cellId=document.getElementById('cellSelect').value;
+  if(!cellId){showToast('Load a cell first','warning');return;}
+  appState.allocations.push({id:appState.allocations.length,sno:appState.allocations.length+1,process:'',category:'Operator',plan:1,assigned:'',remark:'',status:'pending'});
+  renderAllocationTable();
+  setTimeout(()=>{const inputs=document.querySelectorAll('#allocationBody tr:last-child input.editable');if(inputs.length)inputs[0].focus();},50);
+}
+
+function deleteAllocationRow(idx){
+  appState.allocations.splice(idx,1);
+  appState.allocations.forEach((r,i)=>r.sno=i+1);
+  renderAllocationTable(); updateStats();
+  showToast('Row removed','success');
+}
+
+function clearNames(){
+  appState.allocations.forEach(r=>{r.assigned='';r.remark='';r.status='pending';});
+  renderAllocationTable(); updateStats();
+  showToast('Names cleared','success');
+}
+
+function updateStats(){
+  const total=appState.allocations.length;
+  const filled=appState.allocations.filter(r=>r.assigned.trim()).length;
+  const vacant=total-filled;
+  const util=total>0?Math.round(filled/total*100):0;
+  const absent=appState.allocations.filter(r=>r.remark==='Absent').length;
+  document.getElementById('statsGrid').innerHTML=`
+    <div class="stat-box blue"><div class="stat-value">${total}</div><div class="stat-label">Total Positions</div></div>
+    <div class="stat-box green"><div class="stat-value">${filled}</div><div class="stat-label">Filled</div></div>
+    <div class="stat-box red"><div class="stat-value">${vacant}</div><div class="stat-label">Vacant</div></div>
+    <div class="stat-box amber"><div class="stat-value">${util}%</div><div class="stat-label">Utilisation</div></div>
+    <div class="stat-box purple"><div class="stat-value">${absent}</div><div class="stat-label">Absent</div></div>
+  `;
+}
+
+function saveAllocation(){
+  const cellId=document.getElementById('cellSelect').value;
+  const date=document.getElementById('allocationDate').value;
+  const shift=document.getElementById('allocationShift').value;
+  if(!cellId){showToast('Select a cell first','warning');return;}
+  const key=`alloc_${cellId}_${date}_${shift}`;
+  localStorage.setItem(key,JSON.stringify(appState.allocations));
+  showToast('Allocation saved locally ✓','success');
+  pushHistory(cellId,date,shift);
+  updateAnalytics();
+}
+
+// ════════════════════════════════════════════════════════════
+// DOWNLOAD SINGLE SHEET (filled names → Excel)
+// ════════════════════════════════════════════════════════════
+function downloadSingleSheet(){
+  const cellId=document.getElementById('cellSelect').value;
+  if(!cellId||!appState.allocations.length){showToast('Load a cell and fill names first','warning');return;}
+  const cell=CELLS[cellId];
+  const date=document.getElementById('allocationDate').value;
+  const shift='Shift '+document.getElementById('allocationShift').value;
+  const month=document.getElementById('allocationMonth').value;
+  const company=(document.getElementById('companyName').value||'Elkayem Auto Ancillaries Pvt Ltd').toUpperCase();
+  const dateLabel=date?new Date(date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'';
+  const monthLabel=month?new Date(month+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'}):'';
+
+  const wb=XLSX.utils.book_new();
+  const wsData=[
+    [company,'','','','',''],
+    ['MAN POWER ALLOCATION SHEET','','','',shift,'Date: '+dateLabel],
+    [cell.label,'','','','Month: '+monthLabel,''],
+    [],
+    ['S.No','Process Name','Category','Plan','Employee Name','Remark','Status'],
+  ];
+  appState.allocations.forEach(r=>{
+    wsData.push([r.sno,r.process,r.category,r.plan,r.assigned,r.remark,r.status]);
+  });
+  wsData.push([]);
+  wsData.push(['','','Total',appState.allocations.length,appState.allocations.filter(r=>r.assigned.trim()).length+' filled','','']);
+
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:6},{wch:40},{wch:14},{wch:6},{wch:26},{wch:10},{wch:12}];
+
+  // Bold header rows
+  ['A1','A2','A3','A5','B5','C5','D5','E5','F5','G5'].forEach(cell=>{
+    if(ws[cell]) ws[cell].s={font:{bold:true}};
+  });
+
+  XLSX.utils.book_append_sheet(wb,ws,cell.label.substring(0,31));
+  const fname=`ManPower_Cell${cellId}_${date}_${shift.replace(' ','')}.xlsx`;
+  XLSX.writeFile(wb,fname);
+  showToast('Sheet downloaded: '+fname,'success');
+}
+
+function exportAllocationExcel(){
+  if(!appState.allocations.length){showToast('Load data first','warning');return;}
+  downloadSingleSheet();
+}
+
+function printSheet(){
+  if(!appState.allocations.length){showToast('Load data first','warning');return;}
+  window.print();
+}
+
+// ════════════════════════════════════════════════════════════
+// ATTENDANCE
+// ════════════════════════════════════════════════════════════
+function loadAttendance(){
+  const date=document.getElementById('attDate').value;
+  const shift=document.getElementById('attShift').value;
+  // Gather from all saved allocations for this date+shift
+  let rows=[];
+  for(let c=1;c<=11;c++){
+    const key=`alloc_${c}_${date}_${shift}`;
+    const saved=JSON.parse(localStorage.getItem(key)||'null');
+    if(saved){
+      saved.filter(r=>r.assigned.trim()).forEach((r,i)=>{
+        rows.push({sno:rows.length+1,name:r.assigned,process:r.process,cell:'Cell '+c,clockIn:'',clockOut:'',status:'Present'});
+      });
+    }
+  }
+  appState.attendance=rows;
+  if(!rows.length){showToast('No allocation data for '+date+' Shift '+shift+'. Save allocation first.','warning');}
+  renderAttendance();
+  updateAttStats();
+}
+
+function renderAttendance(){
+  const tb=document.getElementById('attBody');
+  if(!appState.attendance.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">No data – load attendance</td></tr>';return;}
+  tb.innerHTML=appState.attendance.map((r,i)=>`
+    <tr>
+      <td>${r.sno}</td>
+      <td><strong>${escH(r.name)}</strong></td>
+      <td>${escH(r.process)}</td>
+      <td>${r.cell}</td>
+      <td><input type="time" class="editable" value="${r.clockIn}" onchange="appState.attendance[${i}].clockIn=this.value;updateAttStats();" /></td>
+      <td><input type="time" class="editable" value="${r.clockOut}" onchange="appState.attendance[${i}].clockOut=this.value;updateAttStats();" /></td>
+      <td>
+        <select class="editable" onchange="appState.attendance[${i}].status=this.value;updateAttStats();">
+          <option value="Present" ${r.status==='Present'?'selected':''}>Present</option>
+          <option value="Absent"  ${r.status==='Absent'?'selected':''}>Absent</option>
+          <option value="Late"    ${r.status==='Late'?'selected':''}>Late</option>
+          <option value="Leave"   ${r.status==='Leave'?'selected':''}>Leave</option>
+        </select>
+      </td>
+      <td><button class="btn btn-sm btn-danger" onclick="appState.attendance.splice(${i},1);renderAttendance();"><i class="fas fa-trash"></i></button></td>
+    </tr>`).join('');
+}
+
+function updateAttStats(){
+  const total=appState.attendance.length;
+  const present=appState.attendance.filter(r=>r.status==='Present'||r.status==='Late').length;
+  const absent=appState.attendance.filter(r=>r.status==='Absent').length;
+  const late=appState.attendance.filter(r=>r.status==='Late').length;
+  document.getElementById('attStats').innerHTML=`
+    <div class="stat-box blue"><div class="stat-value">${total}</div><div class="stat-label">Total</div></div>
+    <div class="stat-box green"><div class="stat-value">${present}</div><div class="stat-label">Present</div></div>
+    <div class="stat-box red"><div class="stat-value">${absent}</div><div class="stat-label">Absent</div></div>
+    <div class="stat-box amber"><div class="stat-value">${late}</div><div class="stat-label">Late</div></div>
+  `;
+}
+
+function saveAttendance(){
+  const date=document.getElementById('attDate').value;
+  const shift=document.getElementById('attShift').value;
+  localStorage.setItem(`att_${date}_${shift}`,JSON.stringify(appState.attendance));
+  showToast('Attendance saved ✓','success');
+  updateAnalytics();
+}
+
+function exportAttendanceExcel(){
+  if(!appState.attendance.length){showToast('No data','warning');return;}
+  const wb=XLSX.utils.book_new();
+  const wsData=[
+    ['Attendance Sheet','','','',document.getElementById('attDate').value],
+    ['S.No','Employee','Process','Cell','Clock In','Clock Out','Status'],
+    ...appState.attendance.map(r=>[r.sno,r.name,r.process,r.cell,r.clockIn,r.clockOut,r.status])
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:5},{wch:22},{wch:30},{wch:10},{wch:10},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'Attendance');
+  XLSX.writeFile(wb,`Attendance_${document.getElementById('attDate').value}.xlsx`);
+  showToast('Attendance exported','success');
+}
+
+// ════════════════════════════════════════════════════════════
+// OVERTIME
+// ════════════════════════════════════════════════════════════
+function loadOT(){
+  const month=document.getElementById('otMonth').value;
+  const saved=JSON.parse(localStorage.getItem('otLogs_'+month)||'[]');
+  appState.otLogs=saved;
+  renderOT(); updateOTStats();
+  if(!saved.length) showToast('No OT records for this month yet','warning');
+}
+
+function renderOT(){
+  const tb=document.getElementById('otBody');
+  if(!appState.otLogs.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">No OT records</td></tr>';return;}
+  tb.innerHTML=appState.otLogs.map((r,i)=>`
+    <tr>
+      <td>${i+1}</td>
+      <td><input type="text" class="editable" value="${escH(r.name)}" onchange="appState.otLogs[${i}].name=this.value;" placeholder="Name…"/></td>
+      <td>
+        <select class="editable remark-select" onchange="appState.otLogs[${i}].cell=this.value;">
+          ${[1,2,3,4,5,6,7,8,9,10,11].map(c=>`<option value="${c}" ${r.cell==c?'selected':''}>Cell ${c}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="date" class="editable" value="${r.date}" onchange="appState.otLogs[${i}].date=this.value;"/></td>
+      <td><input type="number" class="editable ot-input" value="${r.hours}" min="0" max="12" step="0.5" onchange="appState.otLogs[${i}].hours=parseFloat(this.value)||0;updateOTStats();"/></td>
+      <td><input type="text" class="editable" value="${escH(r.reason)}" onchange="appState.otLogs[${i}].reason=this.value;" placeholder="Reason…"/></td>
+      <td>
+        <select class="editable remark-select" onchange="appState.otLogs[${i}].approved=this.value;">
+          <option value="pending" ${r.approved==='pending'?'selected':''}>Pending</option>
+          <option value="yes"     ${r.approved==='yes'?'selected':''}>Approved</option>
+          <option value="no"      ${r.approved==='no'?'selected':''}>Rejected</option>
+        </select>
+      </td>
+      <td><button class="btn btn-sm btn-danger" onclick="appState.otLogs.splice(${i},1);renderOT();updateOTStats();"><i class="fas fa-trash"></i></button></td>
+    </tr>`).join('');
+}
+
+function addOTRow(){
+  appState.otLogs.push({name:'',cell:'1',date:new Date().toISOString().split('T')[0],hours:0,reason:'',approved:'pending'});
+  renderOT();
+}
+
+function updateOTStats(){
+  const total=appState.otLogs.reduce((s,r)=>s+parseFloat(r.hours||0),0);
+  const approved=appState.otLogs.filter(r=>r.approved==='yes').length;
+  const pending=appState.otLogs.filter(r=>r.approved==='pending').length;
+  document.getElementById('otStats').innerHTML=`
+    <div class="stat-box amber"><div class="stat-value">${total.toFixed(1)}</div><div class="stat-label">Total OT Hours</div></div>
+    <div class="stat-box green"><div class="stat-value">${approved}</div><div class="stat-label">Approved</div></div>
+    <div class="stat-box purple"><div class="stat-value">${pending}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-box blue"><div class="stat-value">${appState.otLogs.length}</div><div class="stat-label">Entries</div></div>
+  `;
+}
+
+function saveOT(){
+  const month=document.getElementById('otMonth').value;
+  localStorage.setItem('otLogs_'+month,JSON.stringify(appState.otLogs));
+  showToast('OT records saved ✓','success');
+  updateAnalytics();
+}
+
+function exportOTExcel(){
+  if(!appState.otLogs.length){showToast('No OT data','warning');return;}
+  const wb=XLSX.utils.book_new();
+  const wsData=[
+    ['Overtime Log','','','',document.getElementById('otMonth').value],
+    ['S.No','Employee','Cell','Date','OT Hours','Reason','Approved'],
+    ...appState.otLogs.map((r,i)=>[i+1,r.name,'Cell '+r.cell,r.date,r.hours,r.reason,r.approved])
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:5},{wch:22},{wch:8},{wch:12},{wch:10},{wch:24},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'OT Log');
+  XLSX.writeFile(wb,`OT_Log_${document.getElementById('otMonth').value}.xlsx`);
+  showToast('OT exported','success');
+}
+
+// ════════════════════════════════════════════════════════════
+// EMPLOYEES (local storage)
+// ════════════════════════════════════════════════════════════
+function loadEmployeesLocal(){
+  appState.employees=JSON.parse(localStorage.getItem('employees')||'[]');
+  renderEmployeeTable();
+}
+
+function renderEmployeeTable(filter=''){
+  const tb=document.getElementById('employeeBody');
+  let list=appState.employees;
+  if(filter) list=list.filter(e=>e.name.toLowerCase().includes(filter)||e.category.toLowerCase().includes(filter));
+  if(!list.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">'+(filter?'No match':'No employees yet – click Add Employee')+'</td></tr>';return;}
+  tb.innerHTML=list.map((e,i)=>`
+    <tr>
+      <td style="color:var(--text-muted)">${e.id||i+1}</td>
+      <td><strong>${escH(e.name)}</strong></td>
+      <td><span class="badge badge-pending">${escH(e.category)}</span></td>
+      <td>${escH(e.phone||'–')}</td>
+      <td><span class="badge ${e.status==='active'?'badge-assigned':e.status==='leave'?'badge-late':'badge-absent'}">${e.status}</span></td>
+      <td>
+        <button class="btn btn-sm btn-secondary" onclick="editEmployee(${i})" style="margin-right:4px;"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-sm btn-danger" onclick="deleteEmployee(${i})"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function filterEmployees(v){renderEmployeeTable(v.toLowerCase());}
+
+function openEmployeeModal(emp,idx){
+  document.getElementById('empName').value=emp?emp.name:'';
+  document.getElementById('empCategory').value=emp?emp.category:'Robot Op';
+  document.getElementById('empPhone').value=emp?emp.phone||'':'';
+  document.getElementById('empStatus').value=emp?emp.status:'active';
+  document.getElementById('employeeModal').dataset.editIdx=idx!=null?idx:'';
+  document.getElementById('employeeModal').classList.add('active');
+}
+function closeEmployeeModal(){document.getElementById('employeeModal').classList.remove('active');}
+function editEmployee(i){openEmployeeModal(appState.employees[i],i);}
+function deleteEmployee(i){if(!confirm('Delete this employee?'))return;appState.employees.splice(i,1);localStorage.setItem('employees',JSON.stringify(appState.employees));renderEmployeeTable();showToast('Employee deleted','success');}
+
+function saveEmployee(){
+  const name=document.getElementById('empName').value.trim();
+  if(!name){showToast('Name required','warning');return;}
+  const emp={id:Date.now(),name,category:document.getElementById('empCategory').value,phone:document.getElementById('empPhone').value,status:document.getElementById('empStatus').value};
+  const idx=document.getElementById('employeeModal').dataset.editIdx;
+  if(idx!==''){appState.employees[parseInt(idx)]=emp;}
+  else{appState.employees.push(emp);}
+  localStorage.setItem('employees',JSON.stringify(appState.employees));
+  closeEmployeeModal(); renderEmployeeTable();
+  showToast('Employee saved ✓','success');
+}
+
+// ════════════════════════════════════════════════════════════
+// ANALYTICS
+// ════════════════════════════════════════════════════════════
+function updateAnalytics(){
+  const employees=JSON.parse(localStorage.getItem('employees')||'[]').length;
+  const today=new Date().toISOString().split('T')[0];
+
+  let allocatedToday=0, totalToday=0;
+  for(let c=1;c<=11;c++){
+    for(let s=1;s<=3;s++){
+      const d=JSON.parse(localStorage.getItem(`alloc_${c}_${today}_${s}`)||'null');
+      if(d){totalToday+=d.length;allocatedToday+=d.filter(r=>r.assigned&&r.assigned.trim()).length;}
+    }
+  }
+  const util=totalToday>0?Math.round(allocatedToday/totalToday*100):0;
+
+  const month=new Date().toISOString().slice(0,7);
+  const otLogs=JSON.parse(localStorage.getItem('otLogs_'+month)||'[]');
+  const otHours=otLogs.reduce((s,r)=>s+parseFloat(r.hours||0),0);
+
+  const att=JSON.parse(localStorage.getItem(`att_${today}_1`)||'[]');
+  const absent=att.filter(r=>r.status==='Absent').length;
+
+  document.getElementById('an-employees').textContent=employees;
+  document.getElementById('an-today').textContent=allocatedToday;
+  document.getElementById('an-util').textContent=util+'%';
+  document.getElementById('an-ot').textContent=otHours.toFixed(1)+' hrs';
+  document.getElementById('an-absent').textContent=absent;
+
+  // Cell summary table
+  const rows=[];
+  for(let c=1;c<=11;c++){
+    let filled=0,total=0;
+    for(let s=1;s<=3;s++){
+      const d=JSON.parse(localStorage.getItem(`alloc_${c}_${today}_${s}`)||'null');
+      if(d){total+=d.length;filled+=d.filter(r=>r.assigned&&r.assigned.trim()).length;}
+    }
+    if(total>0) rows.push({cell:'Cell '+c,total,filled,vacant:total-filled,util:Math.round(filled/total*100)});
+  }
+  const atb=document.getElementById('analyticsBody');
+  if(!rows.length){atb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">Save allocation data first</td></tr>';}
+  else{
+    atb.innerHTML=rows.map(r=>`
+      <tr>
+        <td><strong>${r.cell}</strong></td>
+        <td style="text-align:center">${r.total}</td>
+        <td style="text-align:center;color:#4db87a">${r.filled}</td>
+        <td style="text-align:center;color:#e07070">${r.vacant}</td>
+        <td style="text-align:center;">
+          <div style="background:var(--border);border-radius:4px;height:8px;width:100%;overflow:hidden;">
+            <div style="background:${r.util>=80?'#639922':r.util>=50?'var(--primary)':'#c04040'};height:100%;width:${r.util}%;transition:width .5s;"></div>
+          </div>
+          <span style="font-size:.75rem;color:var(--text-muted);">${r.util}%</span>
+        </td>
+      </tr>`).join('');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// HISTORY
+// ════════════════════════════════════════════════════════════
+function pushHistory(cellId,date,shift){
+  let hist=JSON.parse(localStorage.getItem('allocHistory')||'[]');
+  appState.allocations.filter(r=>r.assigned.trim()).forEach(r=>{
+    hist.unshift({date,cell:'Cell '+cellId,employee:r.assigned,process:r.process,shift:'Shift '+shift,status:r.status});
+  });
+  hist=hist.slice(0,500);
+  localStorage.setItem('allocHistory',JSON.stringify(hist));
+}
+
+function loadHistory(){
+  const date=document.getElementById('historyDate').value;
+  const cell=document.getElementById('historyCellFilter').value;
+  let hist=JSON.parse(localStorage.getItem('allocHistory')||'[]');
+  if(date) hist=hist.filter(h=>h.date===date);
+  if(cell) hist=hist.filter(h=>h.cell==='Cell '+cell);
+  appState.history=hist;
+  const tb=document.getElementById('historyBody');
+  if(!hist.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">No history found</td></tr>';return;}
+  tb.innerHTML=hist.map(h=>`
+    <tr>
+      <td>${h.date}</td>
+      <td>${h.cell}</td>
+      <td><strong>${escH(h.employee)}</strong></td>
+      <td>${escH(h.process)}</td>
+      <td>${h.shift}</td>
+      <td><span class="badge badge-${h.status}">${h.status}</span></td>
+    </tr>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════════════════════════════
+function saveSettings(){
+  localStorage.setItem('companyName',document.getElementById('companyName').value);
+  applyTheme(document.getElementById('themeSelect').value);
+  showToast('Settings saved ✓','success');
+}
+
+function exportAllData(){
+  const data={
+    employees:JSON.parse(localStorage.getItem('employees')||'[]'),
+    history:JSON.parse(localStorage.getItem('allocHistory')||'[]'),
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='elkayem_backup_'+new Date().toISOString().split('T')[0]+'.json';
+  a.click();
+  showToast('Data exported','success');
+}
+
+function clearLocalData(){
+  if(!confirm('Clear ALL local data? This cannot be undone.')) return;
+  localStorage.clear();
+  location.reload();
+}
+
+// ════════════════════════════════════════════════════════════
+// UTILITY
+// ════════════════════════════════════════════════════════════
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.background=type==='danger'?'#c04040':type==='warning'?'#d4900a':'#1a6e3a';
+  t.style.display='block';
+  clearTimeout(window._tt);
+  window._tt=setTimeout(()=>t.style.display='none',3000);
+}
+function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+</body>
+</html>
