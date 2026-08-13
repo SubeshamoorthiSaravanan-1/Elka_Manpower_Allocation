@@ -97,10 +97,14 @@ class Database:
                 plan_count INTEGER,
                 assigned_employee TEXT,
                 status TEXT DEFAULT 'pending',
+                approval_status TEXT DEFAULT 'pending',
                 created_by INTEGER,
+                approved_by INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(cell_id, date, shift, process_name)
+                approved_at TIMESTAMP,
+                UNIQUE(cell_id, date, shift, process_name),
+                FOREIGN KEY(approved_by) REFERENCES users(id)
             )
         ''')
 
@@ -241,15 +245,15 @@ class Database:
         self.execute('DELETE FROM employees WHERE id=?', (emp_id,))
 
     def save_allocation(self, cell_id: str, date: str, shift: int, rows: List[Dict], user_id: int):
-        """Save allocation data"""
+        """Save allocation data with pending approval status"""
         for row in rows:
             self.execute(
                 '''INSERT OR REPLACE INTO allocations 
-                   (cell_id, date, shift, process_name, category, plan_count, assigned_employee, status, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                   (cell_id, date, shift, process_name, category, plan_count, assigned_employee, status, approval_status, created_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     cell_id, date, shift, row.get('process', ''), row.get('category', ''),
-                    row.get('plan', 1), row.get('assigned', ''), row.get('status', 'pending'), user_id
+                    row.get('plan', 1), row.get('assigned', ''), row.get('status', 'pending'), 'pending', user_id
                 )
             )
 
@@ -336,6 +340,43 @@ class Database:
         )
         return results[0]['user_id'] if results else None
 
+    def get_pending_approvals(self) -> List[Dict]:
+        """Get allocations pending approval"""
+        return self.query(
+            '''SELECT * FROM allocations 
+               WHERE approval_status = 'pending' 
+               ORDER BY created_at DESC LIMIT 500'''
+        )
+
+    def approve_allocation(self, allocation_id: int, approved_by: int) -> bool:
+        """Approve allocation"""
+        try:
+            self.execute(
+                '''UPDATE allocations 
+                   SET approval_status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP
+                   WHERE id = ?''',
+                (approved_by, allocation_id)
+            )
+            return True
+        except Exception as e:
+            print(f"Error approving allocation: {e}")
+            return False
+
+    def reject_allocation(self, allocation_id: int, approved_by: int) -> bool:
+        """Reject allocation"""
+        try:
+            self.execute(
+                '''UPDATE allocations 
+                   SET approval_status = 'rejected', approved_by = ?, approved_at = CURRENT_TIMESTAMP
+                   WHERE id = ?''',
+                (approved_by, allocation_id)
+            )
+            return True
+        except Exception as e:
+            print(f"Error rejecting allocation: {e}")
+            return False
+
+
 
 class APIHandler(BaseHTTPRequestHandler):
     db = Database(DB_FILE)
@@ -392,7 +433,7 @@ class APIHandler(BaseHTTPRequestHandler):
         if parsed.path == '/api/login':
             username = data.get('username')
             password = data.get('password')
-            requested_role = data.get('role', 'supervisor')  # Frontend can request a role for testing
+            requested_role = data.get('role')  # Frontend can request a role for testing (optional)
 
             if not username or not password:
                 self.send_error_json('Username and password required', 400)
@@ -403,9 +444,12 @@ class APIHandler(BaseHTTPRequestHandler):
                 self.send_error_json('Invalid credentials', 401)
                 return
 
-            # Validate requested role is valid (for development/testing)
-            if requested_role not in VALID_ROLES:
-                requested_role = user['role']  # Fall back to database role
+            # Default to the user's real database role. Only honor a
+            # client-requested role if one was actually sent AND it's a
+            # recognized role - never silently default everyone to
+            # 'supervisor' regardless of their real privileges.
+            if not requested_role or requested_role not in VALID_ROLES:
+                requested_role = user['role']
 
             token = self.db.create_session(user['id'])
             self.send_json_response({
@@ -485,6 +529,33 @@ class APIHandler(BaseHTTPRequestHandler):
                 data.get('status', 'active')
             )
             self.send_json_response({'status': 'ok'}, 200)
+
+        # ── Approve Allocation ──
+        elif parsed.path.startswith('/api/allocations/approve/'):
+            user = self.db.get_user_by_id(user_id)
+            if user['role'] != 'admin':
+                self.send_error_json('Admin access required', 403)
+                return
+            allocation_id = int(parsed.path.split('/')[-1])
+            success = self.db.approve_allocation(allocation_id, user_id)
+            if success:
+                self.send_json_response({'status': 'ok', 'message': 'Allocation approved'}, 200)
+            else:
+                self.send_error_json('Failed to approve', 500)
+
+        # ── Reject Allocation ──
+        elif parsed.path.startswith('/api/allocations/reject/'):
+            user = self.db.get_user_by_id(user_id)
+            if user['role'] != 'admin':
+                self.send_error_json('Admin access required', 403)
+                return
+            allocation_id = int(parsed.path.split('/')[-1])
+            success = self.db.reject_allocation(allocation_id, user_id)
+            if success:
+                self.send_json_response({'status': 'ok', 'message': 'Allocation rejected'}, 200)
+            else:
+                self.send_error_json('Failed to reject', 500)
+
         else:
             self.send_error_json('Not found', 404)
 
@@ -531,6 +602,15 @@ class APIHandler(BaseHTTPRequestHandler):
             allocations = self.db.get_allocations(cell_id, date)
             self.send_json_response({'allocations': allocations}, 200)
 
+        # ── Get Pending Approvals (Admin Only) ──
+        elif parsed.path == '/api/allocations/pending':
+            user = self.db.get_user_by_id(user_id)
+            if user['role'] != 'admin':
+                self.send_error_json('Admin access required', 403)
+                return
+            pending = self.db.get_pending_approvals()
+            self.send_json_response({'pending': pending}, 200)
+
         # ── Get Allocation History ──
         elif parsed.path == '/api/allocations/history':
             date = query_params.get('date', [None])[0]
@@ -552,7 +632,33 @@ class APIHandler(BaseHTTPRequestHandler):
         if path == '/' or path == '/index.html':
             file_path = os.path.join(DIRECTORY, 'index_advanced.html')
         else:
-            file_path = os.path.join(DIRECTORY, path.lstrip('/'))
+            # SECURITY: resolve the requested path and verify it stays
+            # inside DIRECTORY before touching the filesystem. Without
+            # this check, a path like /../server_advanced.py or
+            # /../elkayem.db lets an authenticated user read any file
+            # on the server (source code, secrets, the database).
+            requested = os.path.normpath(path.lstrip('/'))
+            if requested.startswith('..') or os.path.isabs(requested):
+                self.send_response(403)
+                self.end_headers()
+                return
+            base = os.path.realpath(DIRECTORY)
+            file_path = os.path.realpath(os.path.join(base, requested))
+            if not (file_path == base or file_path.startswith(base + os.sep)):
+                self.send_response(403)
+                self.end_headers()
+                return
+            # SECURITY: don't blindly serve every file that happens to
+            # live next to the server (source code, .db, .md docs,
+            # start scripts, etc.) - only allow real static-asset
+            # extensions. This is a whitelist, not a blacklist, so new
+            # sensitive files added later are safe by default.
+            ALLOWED_EXTENSIONS = ('.html', '.css', '.js', '.png', '.jpg',
+                                   '.jpeg', '.svg', '.ico', '.woff', '.woff2')
+            if not file_path.lower().endswith(ALLOWED_EXTENSIONS):
+                self.send_response(403)
+                self.end_headers()
+                return
 
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
             self.send_response(404)
