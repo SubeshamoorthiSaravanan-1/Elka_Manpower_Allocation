@@ -456,6 +456,7 @@
     <button onclick="switchTab('employees')" id="nav-employees"><i class="fas fa-users"></i> Employees</button>
     <button onclick="switchTab('analytics')" id="nav-analytics"><i class="fas fa-chart-bar"></i> Analytics</button>
     <button onclick="switchTab('history')" id="nav-history"><i class="fas fa-history"></i> History</button>
+    <button onclick="switchTab('approvals')" id="nav-approvals" style="display:none;"><i class="fas fa-check-circle"></i> Pending Approvals</button>
     <div class="sidebar-section">System</div>
     <button onclick="switchTab('settings')" id="nav-settings"><i class="fas fa-cog"></i> Settings</button>
   </nav>
@@ -779,6 +780,37 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB: PENDING APPROVALS (ADMIN ONLY)                       -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-approvals" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-check-circle"></i> Pending Approvals</div>
+    <div style="margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="loadPendingApprovals()"><i class="fas fa-refresh"></i> Refresh Pending</button>
+    </div>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Cell</th>
+            <th>Date</th>
+            <th>Process</th>
+            <th>Employee</th>
+            <th>Status</th>
+            <th>Submitted By</th>
+            <th>Submitted On</th>
+            <th style="text-align:center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="approvalsBody">
+          <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">No pending approvals</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
 <!-- TAB: SETTINGS                                             -->
 <!-- ══════════════════════════════════════════════════════════ -->
 <div id="tab-settings" class="tab-content hidden">
@@ -1000,7 +1032,11 @@ const CELLS = {
 // ════════════════════════════════════════════════════════════
 // APP STATE
 // ════════════════════════════════════════════════════════════
-const API_BASE='http://localhost:8080/api';
+// Use whatever host/port served this page, not a hardcoded localhost.
+// Hardcoding localhost breaks multi-user access entirely: every
+// visitor's browser would try to reach ITS OWN machine's API server
+// instead of the shared one, so nothing would ever sync between users.
+const API_BASE=window.location.origin+'/api';
 let appState={
   currentUser:null, currentTab:'allocation',
   allocations:[], employees:[], history:[],
@@ -1030,6 +1066,12 @@ document.addEventListener('DOMContentLoaded',()=>{
     appState.token=token;
     appState.currentUser=JSON.parse(user);
     document.getElementById('userDisplay').textContent=appState.currentUser.username;
+    
+    // Show Pending Approvals tab only for admins
+    if(appState.currentUser.role==='admin'){
+      document.getElementById('nav-approvals').style.display='flex';
+    }
+    
     loadEmployeesLocal();
     updateAnalytics();
   }
@@ -1128,32 +1170,65 @@ function liveSearch(q){
 // ════════════════════════════════════════════════════════════
 // ALLOCATION
 // ════════════════════════════════════════════════════════════
-function loadAllocation(){
+async function loadAllocation(){
   const cellId=document.getElementById('cellSelect').value;
   if(!cellId){showToast('Select a Cell first','warning');return;}
   const cell=CELLS[cellId];
   const date=document.getElementById('allocationDate').value;
   const shift=document.getElementById('allocationShift').value;
 
-  // Try load saved data from localStorage
-  const key=`alloc_${cellId}_${date}_${shift}`;
-  const saved=JSON.parse(localStorage.getItem(key)||'null');
+  // 'remark' (Present/Absent/Late/OT/...) isn't stored server-side yet,
+  // so it's kept in a small local cache keyed by process name. Everything
+  // that matters for cross-user collaboration (who's assigned, status)
+  // comes from the shared server below.
+  const remarkKey=`allocRemarks_${cellId}_${date}_${shift}`;
+  const remarkCache=JSON.parse(localStorage.getItem(remarkKey)||'{}');
 
-  appState.allocations=cell.processes.map((p,i)=>({
-    id:i, sno:i+1,
-    process:p.process, category:p.category, plan:p.plan,
-    assigned: saved&&saved[i] ? saved[i].assigned : '',
-    remark:   saved&&saved[i] ? saved[i].remark   : '',
-    status:   saved&&saved[i] ? saved[i].status    : 'pending',
-    clockIn:'', clockOut:'',
-    cellId:cellId, date:date, shift:shift,
-  }));
+  let serverRows=null;
+  try{
+    const res=await fetch(`${API_BASE}/allocations?cellId=${encodeURIComponent(cellId)}&date=${encodeURIComponent(date)}`,{
+      headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+    });
+    if(res.ok){
+      const data=await res.json();
+      serverRows=(data.allocations||[]).filter(r=>String(r.shift)===String(shift));
+    }
+  }catch(e){ /* server unreachable - fall through to local-only below */ }
+
+  if(serverRows){
+    appState.allocations=cell.processes.map((p,i)=>{
+      const match=serverRows.find(r=>r.process_name===p.process);
+      return {
+        id:i, sno:i+1,
+        process:p.process, category:p.category, plan:p.plan,
+        assigned: match ? match.assigned_employee : '',
+        remark:   remarkCache[p.process] || '',
+        status:   match ? match.status : 'pending',
+        clockIn:'', clockOut:'',
+        cellId:cellId, date:date, shift:shift,
+      };
+    });
+    showToast('Loaded '+cell.label+' (synced)','success');
+  }else{
+    // Offline fallback: last resort, this browser's own local copy only.
+    const key=`alloc_${cellId}_${date}_${shift}`;
+    const saved=JSON.parse(localStorage.getItem(key)||'null');
+    appState.allocations=cell.processes.map((p,i)=>({
+      id:i, sno:i+1,
+      process:p.process, category:p.category, plan:p.plan,
+      assigned: saved&&saved[i] ? saved[i].assigned : '',
+      remark:   saved&&saved[i] ? saved[i].remark   : '',
+      status:   saved&&saved[i] ? saved[i].status    : 'pending',
+      clockIn:'', clockOut:'',
+      cellId:cellId, date:date, shift:shift,
+    }));
+    showToast('Server unreachable — loaded '+cell.label+' from this device only','warning');
+  }
 
   document.getElementById('cellLabel').textContent=cell.label;
   document.getElementById('print-subtitle').textContent=cell.label+' | Date: '+date+' | Shift: '+shift;
   renderAllocationTable();
   updateStats();
-  showToast('Loaded '+cell.label,'success');
 
   // Push to history
   pushHistory(cellId, date, shift);
@@ -1242,14 +1317,42 @@ function updateStats(){
   `;
 }
 
-function saveAllocation(){
+async function saveAllocation(){
   const cellId=document.getElementById('cellSelect').value;
   const date=document.getElementById('allocationDate').value;
   const shift=document.getElementById('allocationShift').value;
   if(!cellId){showToast('Select a cell first','warning');return;}
+
+  // Always keep a local cache (used for the 'remark' field, which the
+  // server doesn't store yet, and as an offline fallback).
   const key=`alloc_${cellId}_${date}_${shift}`;
   localStorage.setItem(key,JSON.stringify(appState.allocations));
-  showToast('Allocation saved locally ✓','success');
+  const remarkKey=`allocRemarks_${cellId}_${date}_${shift}`;
+  const remarkCache={};
+  appState.allocations.forEach(r=>{ if(r.remark) remarkCache[r.process]=r.remark; });
+  localStorage.setItem(remarkKey,JSON.stringify(remarkCache));
+
+  try{
+    const res=await fetch(`${API_BASE}/allocations`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${localStorage.getItem('token')}`},
+      body:JSON.stringify({
+        cellId, date, shift,
+        rows: appState.allocations.map(r=>({
+          process:r.process, category:r.category, plan:r.plan,
+          assigned:r.assigned, status:r.status
+        }))
+      })
+    });
+    if(res.ok){
+      showToast('Allocation saved — visible to everyone ✓','success');
+    }else{
+      showToast('Save rejected by server (saved on this device only)','warning');
+    }
+  }catch(e){
+    showToast('Server unreachable — saved on this device only','warning');
+  }
+
   pushHistory(cellId,date,shift);
   updateAnalytics();
 }
@@ -1605,6 +1708,83 @@ function loadHistory(){
       <td>${h.shift}</td>
       <td><span class="badge badge-${h.status}">${h.status}</span></td>
     </tr>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// PENDING APPROVALS (ADMIN ONLY)
+// ════════════════════════════════════════════════════════════
+async function loadPendingApprovals(){
+  try{
+    const resp=await fetch('/api/allocations/pending',{
+      headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+    });
+    const data=await resp.json();
+    if(!resp.ok){showToast('Access denied','error');return;}
+    
+    const tb=document.getElementById('approvalsBody');
+    if(!data.pending || !data.pending.length){
+      tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-muted)">✓ No pending approvals</td></tr>';
+      return;
+    }
+    
+    tb.innerHTML=data.pending.map(a=>`
+      <tr>
+        <td><strong>Cell ${a.cell_id}</strong></td>
+        <td>${a.date}</td>
+        <td>${escH(a.process_name)}</td>
+        <td>${escH(a.assigned_employee||'(Unassigned)')}</td>
+        <td><span class="badge badge-pending">Pending</span></td>
+        <td>${a.created_by}</td>
+        <td style="font-size:.75rem">${new Date(a.created_at).toLocaleString()}</td>
+        <td style="text-align:center">
+          <button class="btn btn-sm btn-success" onclick="approveAllocation(${a.id})"><i class="fas fa-check"></i> Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="rejectAllocation(${a.id})"><i class="fas fa-times"></i> Reject</button>
+        </td>
+      </tr>`).join('');
+  }catch(e){
+    console.error(e);
+    showToast('Error loading pending approvals','error');
+  }
+}
+
+async function approveAllocation(id){
+  if(!confirm('Approve this allocation?'))return;
+  try{
+    const resp=await fetch(`/api/allocations/approve/${id}`,{
+      method:'PUT',
+      headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+    });
+    const data=await resp.json();
+    if(resp.ok){
+      showToast('✓ Allocation approved','success');
+      loadPendingApprovals();
+    }else{
+      showToast(data.message||'Failed to approve','error');
+    }
+  }catch(e){
+    console.error(e);
+    showToast('Error approving allocation','error');
+  }
+}
+
+async function rejectAllocation(id){
+  if(!confirm('Reject this allocation?'))return;
+  try{
+    const resp=await fetch(`/api/allocations/reject/${id}`,{
+      method:'PUT',
+      headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+    });
+    const data=await resp.json();
+    if(resp.ok){
+      showToast('✓ Allocation rejected','success');
+      loadPendingApprovals();
+    }else{
+      showToast(data.message||'Failed to reject','error');
+    }
+  }catch(e){
+    console.error(e);
+    showToast('Error rejecting allocation','error');
+  }
 }
 
 // ════════════════════════════════════════════════════════════
