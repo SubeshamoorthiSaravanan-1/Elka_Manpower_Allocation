@@ -28,6 +28,11 @@
     .sidebar-nav button:hover{background:rgba(232,160,32,.12);color:var(--primary);}
     .sidebar-nav button.active{background:rgba(232,160,32,.18);color:var(--primary);font-weight:700;border-left:3px solid var(--primary);}
     .sidebar-nav i{width:18px;text-align:center;}
+.gf-flow-input{width:70px;padding:5px 6px;border-radius:5px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);text-align:center;font-weight:700;}
+.gf-flow-input.gf-green{background:rgba(26,110,58,.25);border-color:var(--success);color:#7be0a0;}
+.gf-flow-input.gf-red{background:rgba(192,64,64,.25);border-color:var(--danger);color:#ff9090;}
+.gf-text-input{width:90px;padding:5px 6px;border-radius:5px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);}
+
     .sidebar-section{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#3a6080;padding:14px 14px 6px;margin-top:6px;}
     .sidebar-footer{margin-top:auto;padding-top:16px;border-top:1px solid #1e4060;}
     .user-badge{background:rgba(232,160,32,.1);padding:8px 12px;border-radius:6px;display:flex;align-items:center;gap:8px;font-size:.85rem;margin-bottom:8px;}
@@ -452,6 +457,7 @@
     <button onclick="switchTab('allocation')" class="active" id="nav-allocation"><i class="fas fa-tasks"></i> Allocation</button>
     <button onclick="switchTab('attendance')" id="nav-attendance"><i class="fas fa-user-clock"></i> Attendance</button>
     <button onclick="switchTab('overtime')" id="nav-overtime"><i class="fas fa-business-time"></i> Overtime</button>
+    <button onclick="switchTab('gasflow')" id="nav-gasflow"><i class="fas fa-gauge-high"></i> Gas Flow Audit</button>
     <div class="sidebar-section">Data</div>
     <button onclick="switchTab('employees')" id="nav-employees"><i class="fas fa-users"></i> Employees</button>
     <button onclick="switchTab('analytics')" id="nav-analytics"><i class="fas fa-chart-bar"></i> Analytics</button>
@@ -687,6 +693,53 @@
         <button class="btn btn-success" onclick="saveOT()"><i class="fas fa-save"></i> Save</button>
         <button class="btn btn-secondary" onclick="exportOTExcel()"><i class="fas fa-file-excel"></i> Export</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-gasflow" class="tab-content hidden">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-gauge-high"></i> Gas Flow Audit Report</div>
+    <div class="control-bar">
+      <div class="field-group">
+        <label>Date</label>
+        <input type="date" id="gfDate" />
+      </div>
+      <div style="align-self:flex-end;display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="loadGasFlow()"><i class="fas fa-search"></i> Load</button>
+        <button class="btn btn-success" onclick="saveGasFlow()"><i class="fas fa-save"></i> Save</button>
+        <button class="btn btn-secondary" onclick="exportGasFlowExcel()"><i class="fas fa-file-excel"></i> Export Excel</button>
+      </div>
+    </div>
+    <div style="font-size:.8rem;color:var(--text-muted);margin-top:6px;">
+      Actual Gas Flow 8–10 LPM is marked <span style="color:var(--success);font-weight:700;">green</span> (normal). Above 10 LPM is marked <span style="color:var(--danger);font-weight:700;">red</span> and needs a revised reading + reason.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table id="gfTable" style="min-width:1600px;">
+        <thead>
+          <tr>
+            <th rowspan="2">Cell No</th>
+            <th rowspan="2">Model Name</th>
+            <th rowspan="2">Process</th>
+            <th rowspan="2">M/C No</th>
+            <th rowspan="2">M/C Name</th>
+            <th colspan="5" style="text-align:center;">SHIFT I &nbsp;|&nbsp; Time: 8:30 AM</th>
+            <th colspan="5" style="text-align:center;">SHIFT I &nbsp;|&nbsp; Time: 3:00 PM</th>
+            <th colspan="5" style="text-align:center;">SHIFT II &nbsp;|&nbsp; Time: 12:00 AM</th>
+          </tr>
+          <tr>
+            <th>Actual Flow (LPM)</th><th>Revised Flow (LPM)</th><th>Name</th><th>Reason</th><th>Supervisor</th>
+            <th>Actual Flow (LPM)</th><th>Revised Flow (LPM)</th><th>Name</th><th>Reason</th><th>Supervisor</th>
+            <th>Actual Flow (LPM)</th><th>Revised Flow (LPM)</th><th>Name</th><th>Reason</th><th>Supervisor</th>
+          </tr>
+        </thead>
+        <tbody id="gfBody">
+          <tr><td colspan="20" style="text-align:center;padding:40px;color:var(--text-muted)">Select a date and click Load to begin</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -1048,6 +1101,263 @@ const CELLS = {
   ]},
 };
 
+const GAS_FLOW_MACHINES = [
+  {cell:'1',model:'N360  Swing arm',process:'Top & Bottom Robo Welding - 1',mcNo:'FR18',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'Top & Bottom Robo Welding - 2',mcNo:'FR17',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'Top & Bottom F.W ; Shock Absorber Sub Assy',mcNo:'FR02',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'I-stage - 1',mcNo:'FR19',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'I-stage - 2',mcNo:'FR33',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'II-stage-1',mcNo:'FR20',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'II-stage-2',mcNo:'FR21',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'III- Stage',mcNo:'FR03',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'IV- Stage',mcNo:'FR22',mcName:'R OTC'},
+  {cell:'1',model:'N360  Swing arm',process:'Full welding 1',mcNo:'F124',mcName:'M ESAB'},
+  {cell:'1',model:'N360  Swing arm',process:'Rework 1',mcNo:'F102',mcName:'M ESAB'},
+  {cell:'1',model:'N360  Swing arm',process:'Full welding 2',mcNo:'F123',mcName:'M ESAB'},
+  {cell:'1',model:'N360  Swing arm',process:'Rework 2',mcNo:'F99',mcName:'M ESAB'},
+  {cell:'2',model:'U358 / XL100 Swing arm',process:'Sub assembly Weldig -I&II',mcNo:'FR06',mcName:'R FANUC'},
+  {cell:'2',model:'U358 / XL100 Swing arm',process:'I-Stage Welding',mcNo:'FR01',mcName:'R FANUC'},
+  {cell:'2',model:'U358 / XL100 Swing arm',process:'II & III stage welding',mcNo:'FR05',mcName:'R FANUC'},
+  {cell:'2',model:'U358 / XL100 Swing arm',process:'Full welding',mcNo:'F118',mcName:'M ESAB'},
+  {cell:'3',model:'U347 SWING ARM (LINE 2)',process:'I-stage',mcNo:'FR07',mcName:'R OTC'},
+  {cell:'3',model:'U347 SWING ARM (LINE 2)',process:'II-stage',mcNo:'FR08',mcName:'R OTC'},
+  {cell:'3',model:'U347 SWING ARM (LINE 2)',process:'III & IV-stage',mcNo:'FR09',mcName:'R OTC'},
+  {cell:'3',model:'U347 SWING ARM (LINE 2)',process:'V-stage',mcNo:'FR10',mcName:'R OTC'},
+  {cell:'3',model:'U347 SWING ARM (LINE 2)',process:'Full welding',mcNo:'F107',mcName:'ESAB'},
+  {cell:'4',model:'U347 Swing arm',process:'I-stage - 1',mcNo:'FR13',mcName:'R OTC'},
+  {cell:'4',model:'U347 Swing arm',process:'I-stage - 2',mcNo:'FR12',mcName:'R OTC'},
+  {cell:'4',model:'U347 Swing arm',process:'II - Stage',mcNo:'FR40',mcName:'R OTC'},
+  {cell:'4',model:'U347 Swing arm',process:'III & IV-stage',mcNo:'FR11',mcName:'R OTC'},
+  {cell:'4',model:'U347 Swing arm',process:'V-stage',mcNo:'FR16',mcName:'R OTC'},
+  {cell:'4',model:'U347 Swing arm',process:'Full welding 1',mcNo:'F127',mcName:'ESAB'},
+  {cell:'4',model:'U347 Swing arm',process:'Full welding 2',mcNo:'F100',mcName:'ESAB'},
+  {cell:'5',model:'U223 / SPORTS Swing arm',process:'I stage welding',mcNo:'FR26',mcName:'R OTC'},
+  {cell:'5',model:'U223 / SPORTS Swing arm',process:'II-Stage Welding',mcNo:'FR27',mcName:'R OTC'},
+  {cell:'5',model:'U223 / SPORTS Swing arm',process:'III & IV stage',mcNo:'FR28',mcName:'R OTC'},
+  {cell:'5',model:'U223 / SPORTS Swing arm',process:'Sub assembly Welding',mcNo:'FR15',mcName:'R FANUC'},
+  {cell:'5',model:'U223 / SPORTS Swing arm',process:'Full welding',mcNo:'F98',mcName:'M ESAB'},
+  {cell:'6',model:'U223 / SPORTS Swing arm (Line 2)',process:'I stage welding',mcNo:'',mcName:'R OTC'},
+  {cell:'6',model:'U223 / SPORTS Swing arm (Line 2)',process:'II-Stage Welding',mcNo:'',mcName:'R OTC'},
+  {cell:'6',model:'U223 / SPORTS Swing arm (Line 2)',process:'III & IV stage',mcNo:'',mcName:'R OTC'},
+  {cell:'6',model:'U223 / SPORTS Swing arm (Line 2)',process:'Sub assembly Welding',mcNo:'',mcName:'R OTC'},
+  {cell:'6',model:'U223 / SPORTS Swing arm (Line 2)',process:'Full welding',mcNo:'',mcName:'M ESAB'},
+  {cell:'7',model:'U546 Swing Arm',process:'Sub Assy 1',mcNo:'',mcName:'R FANUC'},
+  {cell:'7',model:'U546 Swing Arm',process:'Rotory Welding',mcNo:'',mcName:'Rotory'},
+  {cell:'7',model:'U546 Swing Arm',process:'Sub Assy 2',mcNo:'',mcName:'R FANUC'},
+  {cell:'7',model:'U546 Swing Arm',process:'I-Stage',mcNo:'',mcName:'R FANUC'},
+  {cell:'7',model:'U546 Swing Arm',process:'II-Stage',mcNo:'',mcName:'R OTC'},
+  {cell:'7',model:'U546 Swing Arm',process:'III-Stage',mcNo:'',mcName:'R FANUC'},
+  {cell:'7',model:'U546 Swing Arm',process:'Full welding',mcNo:'',mcName:'M ESAB'},
+  {cell:'8',model:'U359 / STAR Swing Arm',process:'I-Stage 1',mcNo:'FR29',mcName:'R OTC'},
+  {cell:'8',model:'U359 / STAR Swing Arm',process:'I-Stage 2',mcNo:'FR30',mcName:'R OTC'},
+  {cell:'8',model:'U359 / STAR Swing Arm',process:'II-Stage',mcNo:'FR31',mcName:'R OTC'},
+  {cell:'8',model:'U359 / STAR Swing Arm',process:'III-Stage',mcNo:'FR32',mcName:'R OTC'},
+  {cell:'8',model:'U359 / STAR Swing Arm',process:'Full welding',mcNo:'F119',mcName:'M ESAB'},
+  {cell:'9',model:'HLX-125 & Star Swing arm (Line 1)',process:'I-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'9',model:'HLX-125 & Star Swing arm (Line 1)',process:'II-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'9',model:'HLX-125 & Star Swing arm (Line 1)',process:'III & IV-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'9',model:'HLX-125 & Star Swing arm (Line 1)',process:'V-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'9',model:'HLX-125 & Star Swing arm (Line 1)',process:'Full welding',mcNo:'',mcName:'ESAB'},
+  {cell:'10',model:'HLX & U237 SWING ARM',process:'I-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'10',model:'HLX & U237 SWING ARM',process:'II-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'10',model:'HLX & U237 SWING ARM',process:'III & IV-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'10',model:'HLX & U237 SWING ARM',process:'V-stage',mcNo:'',mcName:'R OTC'},
+  {cell:'10',model:'HLX & U237 SWING ARM',process:'Full welding',mcNo:'',mcName:'ESAB'},
+];
+
+// ════════════════════════════════════════════════════════════
+// GAS FLOW AUDIT
+// ════════════════════════════════════════════════════════════
+const GF_SHIFT_BLOCKS = [
+  {key:'shift1_830am', label:'Shift I - 8:30 AM'},
+  {key:'shift1_3pm',   label:'Shift I - 3:00 PM'},
+  {key:'shift2_12am',  label:'Shift II - 12:00 AM'},
+];
+let gfData = {}; // gfData[machineIndex][shiftBlockKey] = {actualFlow, revisedFlow, name, reason, supervisor}
+
+function gfRowKey(m){ return m.cell+'|'+m.process+'|'+m.mcNo; }
+
+function gfFlowClass(val){
+  if(val===''||val===null||val===undefined||isNaN(val)) return '';
+  const n=parseFloat(val);
+  if(n>10) return 'gf-red';
+  if(n>=8 && n<=10) return 'gf-green';
+  return ''; // below 8: no fixed rule was given, so left unstyled rather than guessed
+}
+
+function gfUpdateCell(mIdx, shiftKey, field, value){
+  if(!gfData[mIdx]) gfData[mIdx]={};
+  if(!gfData[mIdx][shiftKey]) gfData[mIdx][shiftKey]={actualFlow:'',revisedFlow:'',name:'',reason:'',supervisor:''};
+  gfData[mIdx][shiftKey][field]=value;
+  if(field==='actualFlow' || field==='revisedFlow'){
+    const el=document.getElementById(`gf_${mIdx}_${shiftKey}_${field}`);
+    if(el){ el.classList.remove('gf-green','gf-red'); const c=gfFlowClass(value); if(c) el.classList.add(c); }
+  }
+}
+
+function renderGasFlowTable(){
+  const tbody=document.getElementById('gfBody');
+  let html='';
+  let lastCell=null;
+  // Count rows per cell for rowspan grouping (like the paper form)
+  const cellCounts={};
+  GAS_FLOW_MACHINES.forEach(m=>{ cellCounts[m.cell]=(cellCounts[m.cell]||0)+1; });
+
+  GAS_FLOW_MACHINES.forEach((m,i)=>{
+    const isNewCell = m.cell!==lastCell;
+    lastCell=m.cell;
+    html+='<tr>';
+    if(isNewCell){
+      html+=`<td rowspan="${cellCounts[m.cell]}" style="font-weight:700;vertical-align:middle;">${m.cell}</td>`;
+      html+=`<td rowspan="${cellCounts[m.cell]}" style="vertical-align:middle;">${m.model}</td>`;
+    }
+    html+=`<td>${m.process}</td><td>${m.mcNo||'-'}</td><td>${m.mcName}</td>`;
+    GF_SHIFT_BLOCKS.forEach(sb=>{
+      const d=(gfData[i]&&gfData[i][sb.key])||{actualFlow:'',revisedFlow:'',name:'',reason:'',supervisor:''};
+      const actualFlowClass=gfFlowClass(d.actualFlow);
+      const revisedFlowClass=gfFlowClass(d.revisedFlow);
+      html+=`<td><input type="number" step="0.1" class="gf-flow-input ${actualFlowClass}" id="gf_${i}_${sb.key}_actualFlow" value="${d.actualFlow}" oninput="gfUpdateCell(${i},'${sb.key}','actualFlow',this.value)"></td>`;
+      html+=`<td><input type="number" step="0.1" class="gf-flow-input ${revisedFlowClass}" id="gf_${i}_${sb.key}_revisedFlow" value="${d.revisedFlow}" oninput="gfUpdateCell(${i},'${sb.key}','revisedFlow',this.value)"></td>`;
+      html+=`<td><input type="text" class="gf-text-input" value="${d.name}" oninput="gfUpdateCell(${i},'${sb.key}','name',this.value)"></td>`;
+      html+=`<td><input type="text" class="gf-text-input" value="${d.reason}" oninput="gfUpdateCell(${i},'${sb.key}','reason',this.value)"></td>`;
+      html+=`<td><input type="text" class="gf-text-input" value="${d.supervisor}" oninput="gfUpdateCell(${i},'${sb.key}','supervisor',this.value)"></td>`;
+    });
+    html+='</tr>';
+  });
+  tbody.innerHTML=html;
+}
+
+async function loadGasFlow(){
+  const date=document.getElementById('gfDate').value;
+  if(!date){showToast('Select a date first','warning');return;}
+  gfData={};
+  try{
+    const res=await fetch(`${API_BASE}/gasflow?date=${encodeURIComponent(date)}`,{
+      headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
+    });
+    if(res.ok){
+      const data=await res.json();
+      (data.rows||[]).forEach(r=>{
+        const idx=GAS_FLOW_MACHINES.findIndex(m=>m.cell===r.cell_id && m.process===r.process_name && (m.mcNo||'')===(r.mc_no||''));
+        if(idx===-1) return;
+        if(!gfData[idx]) gfData[idx]={};
+        gfData[idx][r.shift_block]={
+          actualFlow:r.actual_flow??'', revisedFlow:r.revised_flow??'',
+          name:r.reading_name||'', reason:r.reason||'', supervisor:r.supervisor||''
+        };
+      });
+      showToast('Gas flow audit loaded (synced) for '+date,'success');
+    }else{
+      showToast('Server unreachable — showing blank sheet for '+date,'warning');
+    }
+  }catch(e){
+    showToast('Server unreachable — showing blank sheet for '+date,'warning');
+  }
+  renderGasFlowTable();
+}
+
+async function saveGasFlow(){
+  const date=document.getElementById('gfDate').value;
+  if(!date){showToast('Select a date first','warning');return;}
+
+  let anyFail=false;
+  for(const sb of GF_SHIFT_BLOCKS){
+    const rows=[];
+    GAS_FLOW_MACHINES.forEach((m,i)=>{
+      const d=gfData[i]&&gfData[i][sb.key];
+      if(!d) return;
+      const hasData = d.actualFlow!=='' || d.revisedFlow!=='' || d.name || d.reason || d.supervisor;
+      if(!hasData) return;
+      rows.push({
+        cell:m.cell, model:m.model, process:m.process, mcNo:m.mcNo, mcName:m.mcName,
+        actualFlow: d.actualFlow===''?null:parseFloat(d.actualFlow),
+        revisedFlow: d.revisedFlow===''?null:parseFloat(d.revisedFlow),
+        name:d.name, reason:d.reason, supervisor:d.supervisor
+      });
+    });
+    if(!rows.length) continue;
+    try{
+      const res=await fetch(`${API_BASE}/gasflow`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${localStorage.getItem('token')}`},
+        body:JSON.stringify({date, shiftBlock:sb.key, rows})
+      });
+      if(!res.ok) anyFail=true;
+    }catch(e){ anyFail=true; }
+  }
+  if(anyFail){
+    showToast('Some readings failed to sync — check connection and try again','warning');
+  }else{
+    showToast('Gas flow audit saved — visible to everyone ✓','success');
+  }
+}
+
+function gfStatusText(val){
+  if(val===''||val===null||val===undefined) return '';
+  const n=parseFloat(val);
+  if(isNaN(n)) return '';
+  return n>10 ? 'HIGH' : (n>=8 ? 'OK' : 'LOW');
+}
+
+function exportGasFlowExcel(){
+  const date=document.getElementById('gfDate').value||'';
+  const wb=XLSX.utils.book_new();
+  const COLS_PER_BLOCK = 7; // Actual, Actual Status, Revised, Revised Status, Name, Reason, Supervisor
+  const FIXED_COLS = 5;     // Cell No, Model Name, Process, M/C No, M/C Name
+  const TOTAL_COLS = FIXED_COLS + GF_SHIFT_BLOCKS.length*COLS_PER_BLOCK;
+
+  const headerRow1=['GAS FLOW AUDIT REPORT'];
+  for(let i=1;i<TOTAL_COLS;i++) headerRow1.push('');
+
+  const headerRow2=['DATE:',date,'','',''];
+  GF_SHIFT_BLOCKS.forEach(sb=>{ for(let i=0;i<COLS_PER_BLOCK;i++) headerRow2.push(i===0?sb.label:''); });
+
+  // Note: "Status" columns are added next to each flow reading because the free
+  // Excel export library this app uses can't write cell background colors into
+  // the .xlsx file - these text columns carry the green/red signal instead.
+  const headerRow3=['Cell No','Model Name','Process','M/C No','M/C Name'];
+  GF_SHIFT_BLOCKS.forEach(()=>{
+    headerRow3.push('Actual Flow (LPM)','Actual Status','Revised Flow (LPM)','Revised Status','Name','Reason','Supervisor');
+  });
+
+  const dataRows=GAS_FLOW_MACHINES.map((m,i)=>{
+    const row=[m.cell,m.model,m.process,m.mcNo||'',m.mcName];
+    GF_SHIFT_BLOCKS.forEach(sb=>{
+      const d=(gfData[i]&&gfData[i][sb.key])||{};
+      const actual = d.actualFlow===''||d.actualFlow===undefined?'':parseFloat(d.actualFlow);
+      const revised = d.revisedFlow===''||d.revisedFlow===undefined||d.revisedFlow===null?'':parseFloat(d.revisedFlow);
+      row.push(
+        actual, gfStatusText(d.actualFlow),
+        revised, gfStatusText(d.revisedFlow),
+        d.name||'', d.reason||'', d.supervisor||''
+      );
+    });
+    return row;
+  });
+
+  const wsData=[headerRow1, headerRow2, headerRow3, ...dataRows];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+
+  // Merge title row across every column, and each shift-block label across its columns
+  ws['!merges']=[
+    {s:{r:0,c:0},e:{r:0,c:TOTAL_COLS-1}},
+  ];
+  let col=FIXED_COLS;
+  GF_SHIFT_BLOCKS.forEach(()=>{
+    ws['!merges'].push({s:{r:1,c:col},e:{r:1,c:col+COLS_PER_BLOCK-1}});
+    col+=COLS_PER_BLOCK;
+  });
+
+  ws['!cols']=[{wch:7},{wch:26},{wch:32},{wch:9},{wch:10}];
+  GF_SHIFT_BLOCKS.forEach(()=>{
+    ws['!cols'].push({wch:12},{wch:10},{wch:12},{wch:10},{wch:12},{wch:16},{wch:12});
+  });
+
+  XLSX.utils.book_append_sheet(wb,ws,'Gas Flow Audit');
+  XLSX.writeFile(wb,`Gas_Flow_Audit_${date}.xlsx`);
+  showToast('Gas flow audit exported','success');
+}
+
 // ════════════════════════════════════════════════════════════
 // APP STATE
 // ════════════════════════════════════════════════════════════
@@ -1166,6 +1476,10 @@ function switchTab(tab){
   document.getElementById('sidebar').classList.remove('open');
   if(tab==='analytics') updateAnalytics();
   if(tab==='employees') renderEmployeeTable();
+  if(tab==='gasflow' && !document.getElementById('gfDate').value){
+    document.getElementById('gfDate').value=new Date().toISOString().split('T')[0];
+    renderGasFlowTable();
+  }
 }
 
 // ════════════════════════════════════════════════════════════
