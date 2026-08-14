@@ -40,10 +40,10 @@ VALID_ROLES = {
 }
 
 ROLE_PERMISSIONS = {
-    'supervisor': ['view_allocation', 'edit_allocation', 'view_attendance', 'edit_attendance'],
+    'supervisor': ['view_allocation', 'edit_allocation', 'view_attendance', 'edit_attendance', 'view_gasflow', 'edit_gasflow'],
     'am': ['view_allocation', 'edit_allocation', 'view_attendance', 'edit_attendance', 
            'view_overtime', 'edit_overtime', 'view_employees', 'edit_employees', 
-           'view_analytics', 'view_history', 'export_data', 'delete_allocation'],
+           'view_analytics', 'view_history', 'export_data', 'delete_allocation', 'view_gasflow', 'edit_gasflow'],
     'admin': ['*'],  # Admin has all permissions
     'higher_auth': ['view_allocation', 'view_attendance', 'view_overtime', 'view_analytics', 'view_history']
 }
@@ -121,6 +121,30 @@ class Database:
                 shift INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(allocation_id) REFERENCES allocations(id)
+            )
+        ''')
+
+
+        # Gas flow audit table - one row per machine/process per shift-block per date
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS gas_flow_audits (
+                id INTEGER PRIMARY KEY,
+                date DATE NOT NULL,
+                cell_id TEXT NOT NULL,
+                model_name TEXT,
+                process_name TEXT NOT NULL,
+                mc_no TEXT,
+                mc_name TEXT,
+                shift_block TEXT NOT NULL,
+                actual_flow REAL,
+                revised_flow REAL,
+                reading_name TEXT,
+                reason TEXT,
+                supervisor TEXT,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(date, cell_id, process_name, mc_no, shift_block)
             )
         ''')
 
@@ -278,6 +302,30 @@ class Database:
             params.append(date)
 
         return self.query(sql, tuple(params))
+
+
+    def save_gas_flow_audit(self, date: str, shift_block: str, rows: List[Dict], user_id: int):
+        """Save (or update) gas flow audit readings for one date + shift block"""
+        for row in rows:
+            self.execute(
+                '''INSERT OR REPLACE INTO gas_flow_audits
+                   (date, cell_id, model_name, process_name, mc_no, mc_name, shift_block,
+                    actual_flow, revised_flow, reading_name, reason, supervisor, created_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    date, row.get('cell', ''), row.get('model', ''), row.get('process', ''),
+                    row.get('mcNo', ''), row.get('mcName', ''), shift_block,
+                    row.get('actualFlow'), row.get('revisedFlow'), row.get('name', ''),
+                    row.get('reason', ''), row.get('supervisor', ''), user_id
+                )
+            )
+
+    def get_gas_flow_audit(self, date: str) -> List[Dict]:
+        """Get all gas flow audit readings for a given date"""
+        return self.query(
+            'SELECT * FROM gas_flow_audits WHERE date = ?',
+            (date,)
+        )
 
     def get_allocation_history(self, date: Optional[str] = None, cell_id: Optional[str] = None) -> List[Dict]:
         """Get allocation history"""
@@ -497,6 +545,26 @@ class APIHandler(BaseHTTPRequestHandler):
 
             self.send_json_response({'status': 'ok', 'message': 'Allocation saved'}, 200)
 
+
+        # ── Save Gas Flow Audit ──
+        elif parsed.path == '/api/gasflow':
+            user_id = self.get_auth_user()
+            if not user_id:
+                self.send_error_json('Unauthorized', 401)
+                return
+
+            self.db.save_gas_flow_audit(
+                data.get('date'),
+                data.get('shiftBlock'),
+                data.get('rows', []),
+                user_id
+            )
+
+            self.send_json_response(
+                {'status': 'ok', 'message': 'Gas flow audit saved'},
+                200
+            )
+
         else:
             self.send_error_json('Not found', 404)
 
@@ -601,6 +669,13 @@ class APIHandler(BaseHTTPRequestHandler):
             date = query_params.get('date', [None])[0]
             allocations = self.db.get_allocations(cell_id, date)
             self.send_json_response({'allocations': allocations}, 200)
+
+
+        # ── Get Gas Flow Audit ──
+        elif parsed.path == '/api/gasflow':
+            date = query_params.get('date', [None])[0]
+            rows = self.db.get_gas_flow_audit(date)
+            self.send_json_response({'rows': rows}, 200)
 
         # ── Get Pending Approvals (Admin Only) ──
         elif parsed.path == '/api/allocations/pending':
