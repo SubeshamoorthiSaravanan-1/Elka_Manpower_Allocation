@@ -1061,7 +1061,7 @@ const CELLS = {
     {process:"Revising",category:"Operator",plan:1},
     {process:"Final Gauge Inspection",category:"Operator",plan:1},
   ]},
-  "10":{ label:"Cell 10 – HLX & U237 Swingarm", processes:[
+  "10":{ label:"Cell 10 – U347 Swingarm Line-2", processes:[
     {process:"Welding Stage I",category:"Robot Op",plan:1},
     {process:"Welding Stage II",category:"Robot Op",plan:1},
     {process:"Welding Stage III, IV",category:"Robot Op",plan:1},
@@ -1476,7 +1476,6 @@ function switchTab(tab){
   document.getElementById('sidebar').classList.remove('open');
   if(tab==='analytics') updateAnalytics();
   if(tab==='employees') renderEmployeeTable();
-  if(tab==='approvals') loadPendingApprovals();
   if(tab==='gasflow' && !document.getElementById('gfDate').value){
     document.getElementById('gfDate').value=new Date().toISOString().split('T')[0];
     renderGasFlowTable();
@@ -1526,6 +1525,9 @@ function loadAllocation(){
   renderAllocationTable();
   updateStats();
   showToast('Loaded '+cell.label,'success');
+
+  // Push to history
+  pushHistory(cellId, date, shift);
 }
 
 function renderAllocationTable(){
@@ -1655,8 +1657,8 @@ function downloadSingleSheet(){
   ws['!cols']=[{wch:6},{wch:40},{wch:14},{wch:6},{wch:26},{wch:10},{wch:12}];
 
   // Bold header rows
-  ['A1','A2','A3','A5','B5','C5','D5','E5','F5','G5'].forEach(addr=>{
-    if(ws[addr]) ws[addr].s={font:{bold:true}};
+  ['A1','A2','A3','A5','B5','C5','D5','E5','F5','G5'].forEach(cell=>{
+    if(ws[cell]) ws[cell].s={font:{bold:true}};
   });
 
   XLSX.utils.book_append_sheet(wb,ws,cell.label.substring(0,31));
@@ -1681,23 +1683,14 @@ function printSheet(){
 function loadAttendance(){
   const date=document.getElementById('attDate').value;
   const shift=document.getElementById('attShift').value;
-  const attKey=`att_${date}_${shift}`;
-  const savedAtt=JSON.parse(localStorage.getItem(attKey)||'null');
   // Gather from all saved allocations for this date+shift
   let rows=[];
   for(let c=1;c<=11;c++){
     const key=`alloc_${c}_${date}_${shift}`;
     const saved=JSON.parse(localStorage.getItem(key)||'null');
     if(saved){
-      saved.filter(r=>r.assigned.trim()).forEach(r=>{
-        // Preserve previously-saved clock in/out and status for this person if it exists,
-        // instead of always resetting to blank/Present on every reload.
-        const prev = savedAtt ? savedAtt.find(a=>a.name===r.assigned && a.process===r.process && a.cell==='Cell '+c) : null;
-        rows.push({
-          sno:rows.length+1, name:r.assigned, process:r.process, cell:'Cell '+c,
-          clockIn: prev?prev.clockIn:'', clockOut: prev?prev.clockOut:'',
-          status: prev?prev.status:'Present'
-        });
+      saved.filter(r=>r.assigned.trim()).forEach((r,i)=>{
+        rows.push({sno:rows.length+1,name:r.assigned,process:r.process,cell:'Cell '+c,clockIn:'',clockOut:'',status:'Present'});
       });
     }
   }
@@ -1886,9 +1879,8 @@ function deleteEmployee(i){if(!confirm('Delete this employee?'))return;appState.
 function saveEmployee(){
   const name=document.getElementById('empName').value.trim();
   if(!name){showToast('Name required','warning');return;}
+  const emp={id:Date.now(),name,category:document.getElementById('empCategory').value,phone:document.getElementById('empPhone').value,status:document.getElementById('empStatus').value};
   const idx=document.getElementById('employeeModal').dataset.editIdx;
-  const existingId = idx!=='' ? appState.employees[parseInt(idx)].id : Date.now();
-  const emp={id:existingId,name,category:document.getElementById('empCategory').value,phone:document.getElementById('empPhone').value,status:document.getElementById('empStatus').value};
   if(idx!==''){appState.employees[parseInt(idx)]=emp;}
   else{appState.employees.push(emp);}
   localStorage.setItem('employees',JSON.stringify(appState.employees));
@@ -1916,12 +1908,8 @@ function updateAnalytics(){
   const otLogs=JSON.parse(localStorage.getItem('otLogs_'+month)||'[]');
   const otHours=otLogs.reduce((s,r)=>s+parseFloat(r.hours||0),0);
 
-  // Absent count now checks all three shifts for today, not just Shift 1
-  let absent=0;
-  for(let s=1;s<=3;s++){
-    const att=JSON.parse(localStorage.getItem(`att_${today}_${s}`)||'[]');
-    absent+=att.filter(r=>r.status==='Absent').length;
-  }
+  const att=JSON.parse(localStorage.getItem(`att_${today}_1`)||'[]');
+  const absent=att.filter(r=>r.status==='Absent').length;
 
   document.getElementById('an-employees').textContent=employees;
   document.getElementById('an-today').textContent=allocatedToday;
@@ -1963,9 +1951,6 @@ function updateAnalytics(){
 // ════════════════════════════════════════════════════════════
 function pushHistory(cellId,date,shift){
   let hist=JSON.parse(localStorage.getItem('allocHistory')||'[]');
-  // Remove any earlier entries for this exact cell/date/shift so re-saving
-  // the same sheet doesn't pile up duplicate rows every time Save is clicked.
-  hist=hist.filter(h=>!(h.date===date && h.cell==='Cell '+cellId && h.shift==='Shift '+shift));
   appState.allocations.filter(r=>r.assigned.trim()).forEach(r=>{
     hist.unshift({date,cell:'Cell '+cellId,employee:r.assigned,process:r.process,shift:'Shift '+shift,status:r.status});
   });
@@ -1998,11 +1983,11 @@ function loadHistory(){
 // ════════════════════════════════════════════════════════════
 async function loadPendingApprovals(){
   try{
-    const resp=await fetch(`${API_BASE}/allocations/pending`,{
+    const resp=await fetch('/api/allocations/pending',{
       headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
     });
     const data=await resp.json();
-    if(!resp.ok){showToast('Access denied','danger');return;}
+    if(!resp.ok){showToast('Access denied','error');return;}
     
     const tb=document.getElementById('approvalsBody');
     if(!data.pending || !data.pending.length){
@@ -2026,14 +2011,14 @@ async function loadPendingApprovals(){
       </tr>`).join('');
   }catch(e){
     console.error(e);
-    showToast('Error loading pending approvals','danger');
+    showToast('Error loading pending approvals','error');
   }
 }
 
 async function approveAllocation(id){
   if(!confirm('Approve this allocation?'))return;
   try{
-    const resp=await fetch(`${API_BASE}/allocations/approve/${id}`,{
+    const resp=await fetch(`/api/allocations/approve/${id}`,{
       method:'PUT',
       headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
     });
@@ -2042,18 +2027,18 @@ async function approveAllocation(id){
       showToast('✓ Allocation approved','success');
       loadPendingApprovals();
     }else{
-      showToast(data.message||'Failed to approve','danger');
+      showToast(data.message||'Failed to approve','error');
     }
   }catch(e){
     console.error(e);
-    showToast('Error approving allocation','danger');
+    showToast('Error approving allocation','error');
   }
 }
 
 async function rejectAllocation(id){
   if(!confirm('Reject this allocation?'))return;
   try{
-    const resp=await fetch(`${API_BASE}/allocations/reject/${id}`,{
+    const resp=await fetch(`/api/allocations/reject/${id}`,{
       method:'PUT',
       headers:{'Authorization':`Bearer ${localStorage.getItem('token')}`}
     });
@@ -2062,11 +2047,11 @@ async function rejectAllocation(id){
       showToast('✓ Allocation rejected','success');
       loadPendingApprovals();
     }else{
-      showToast(data.message||'Failed to reject','danger');
+      showToast(data.message||'Failed to reject','error');
     }
   }catch(e){
     console.error(e);
-    showToast('Error rejecting allocation','danger');
+    showToast('Error rejecting allocation','error');
   }
 }
 
