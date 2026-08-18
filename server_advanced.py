@@ -1,803 +1,653 @@
-#!/usr/bin/env python3
+a#!/usr/bin/env python3
 """
-Elkayem Auto Ancillaries – Advanced Manpower Allocation Server
-Features: SQLite database, RESTful API, JWT auth, role-based access control
-
-Usage:
-  python server_advanced.py
-
-Then open in browser:
-  http://localhost:8080
+Elkayem Auto Ancillaries – Manpower Allocation Server v4
+Supports: Allocation, Attendance, OT, Gas Flow, Targets, Leave, Skills, Reports, AI features
+Usage: python3 server_v4.py
+Open:  http://localhost:8080
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-import json
-import sqlite3
-import socket
-import os
-import hmac
-import hashlib
-import time
+import json, sqlite3, socket, os, hashlib, time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 
-# Read PORT from environment (for cloud hosting), default to 8080
-PORT = int(os.environ.get('PORT', 8080))
-DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-# Use persistent storage path if available (Render.com)
-DB_FILE = os.path.join(os.environ.get('DATABASE_PATH', DIRECTORY), 'elkayem.db')
-JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-this')
+PORT     = 8080
+DIR      = os.path.dirname(os.path.abspath(__file__))
+DB_FILE  = os.path.join(DIR, 'elkayem_v4.db')
 
-# ════════════════════════════════════════════════════════════
-# ROLE-BASED ACCESS CONTROL CONFIGURATION
-# ════════════════════════════════════════════════════════════
-VALID_ROLES = {
-    'supervisor': 'Working Area Supervisor',
-    'am': 'Area Manager',
-    'admin': 'Administrator',
-    'higher_auth': 'Higher Authority'
-}
+# ══════════════════════════════════════════════════════════════
+# DATABASE
+# ══════════════════════════════════════════════════════════════
+class DB:
+    def __init__(self, path):
+        self.path = path
+        self._init()
 
-ROLE_PERMISSIONS = {
-    'supervisor': ['view_allocation', 'edit_allocation', 'view_attendance', 'edit_attendance', 'view_gasflow', 'edit_gasflow'],
-    'am': ['view_allocation', 'edit_allocation', 'view_attendance', 'edit_attendance', 
-           'view_overtime', 'edit_overtime', 'view_employees', 'edit_employees', 
-           'view_analytics', 'view_history', 'export_data', 'delete_allocation', 'view_gasflow', 'edit_gasflow'],
-    'admin': ['*'],  # Admin has all permissions
-    'higher_auth': ['view_allocation', 'view_attendance', 'view_overtime', 'view_analytics', 'view_history']
-}
+    def _init(self):
+        c = self._conn()
+        cur = c.cursor()
 
-class Database:
-    def __init__(self, db_path):
-        self.db_path = db_path
-        self.init_db()
-
-    def init_db(self):
-        """Initialize database schema"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-
-        # Users table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT DEFAULT 'type1',
-                email TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                active BOOLEAN DEFAULT 1
-            )
+        cur.executescript('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT DEFAULT 'type1',
+            email TEXT,
+            active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            token TEXT UNIQUE,
+            expires_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT,
+            phone TEXT,
+            skills TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS allocations (
+            id INTEGER PRIMARY KEY,
+            cell_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            shift INTEGER DEFAULT 1,
+            process_name TEXT NOT NULL,
+            category TEXT,
+            plan_count INTEGER DEFAULT 1,
+            assigned_employee TEXT,
+            remark TEXT,
+            status TEXT DEFAULT 'pending',
+            created_by INTEGER,
+            approval_status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cell_id, date, shift, process_name)
+        );
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY,
+            date TEXT NOT NULL,
+            shift INTEGER DEFAULT 1,
+            employee_name TEXT NOT NULL,
+            process_name TEXT,
+            cell TEXT,
+            clock_in TEXT,
+            clock_out TEXT,
+            status TEXT DEFAULT 'Present',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, shift, employee_name)
+        );
+        CREATE TABLE IF NOT EXISTS ot_logs (
+            id INTEGER PRIMARY KEY,
+            employee_name TEXT NOT NULL,
+            cell TEXT,
+            date TEXT NOT NULL,
+            hours REAL DEFAULT 0,
+            reason TEXT,
+            approved TEXT DEFAULT 'pending',
+            month TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS gas_flow (
+            id INTEGER PRIMARY KEY,
+            date TEXT NOT NULL,
+            shift_block TEXT NOT NULL,
+            cell TEXT,
+            model TEXT,
+            process_name TEXT,
+            mc_no TEXT,
+            mc_name TEXT,
+            actual_flow REAL,
+            revised_flow REAL,
+            reading_name TEXT,
+            reason TEXT,
+            supervisor TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, shift_block, cell, process_name, mc_no)
+        );
+        CREATE TABLE IF NOT EXISTS production_targets (
+            id INTEGER PRIMARY KEY,
+            date TEXT NOT NULL,
+            shift INTEGER DEFAULT 1,
+            cell INTEGER,
+            product TEXT,
+            target INTEGER DEFAULT 0,
+            actual INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, shift, cell)
+        );
+        CREATE TABLE IF NOT EXISTS leaves (
+            id INTEGER PRIMARY KEY,
+            employee_name TEXT NOT NULL,
+            leave_type TEXT,
+            from_date TEXT,
+            to_date TEXT,
+            days INTEGER DEFAULT 1,
+            reason TEXT,
+            status TEXT DEFAULT 'Pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS skills (
+            id INTEGER PRIMARY KEY,
+            employee_name TEXT UNIQUE NOT NULL,
+            skill_list TEXT,
+            experience INTEGER DEFAULT 1,
+            score INTEGER DEFAULT 7,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS allocation_history (
+            id INTEGER PRIMARY KEY,
+            date TEXT,
+            cell TEXT,
+            employee TEXT,
+            process_name TEXT,
+            shift TEXT,
+            status TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         ''')
+        c.commit()
+        self._seed(cur, c)
+        c.close()
 
-        # Employees table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS employees (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                category TEXT,
-                email TEXT,
-                phone TEXT,
-                status TEXT DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    def _seed(self, cur, c):
+        cur.execute('SELECT COUNT(*) FROM users')
+        if cur.fetchone()[0] == 0:
+            users = [
+                ('admin',      self._hash('admin123'),  'admin',      'admin@elkayem.com'),
+                ('supervisor', self._hash('super123'),  'supervisor', 'sup@elkayem.com'),
+                ('operator',   self._hash('oper123'),   'type1',      'op@elkayem.com'),
+            ]
+            cur.executemany('INSERT INTO users (username,password_hash,role,email) VALUES (?,?,?,?)', users)
 
-        # Allocations table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS allocations (
-                id INTEGER PRIMARY KEY,
-                cell_id TEXT NOT NULL,
-                date DATE NOT NULL,
-                shift INTEGER DEFAULT 1,
-                process_name TEXT NOT NULL,
-                category TEXT,
-                plan_count INTEGER,
-                assigned_employee TEXT,
-                status TEXT DEFAULT 'pending',
-                approval_status TEXT DEFAULT 'pending',
-                created_by INTEGER,
-                approved_by INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                approved_at TIMESTAMP,
-                UNIQUE(cell_id, date, shift, process_name),
-                FOREIGN KEY(approved_by) REFERENCES users(id)
-            )
-        ''')
-
-        # Allocation history table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS allocation_history (
-                id INTEGER PRIMARY KEY,
-                allocation_id INTEGER,
-                date DATE NOT NULL,
-                cell_id TEXT,
-                process_name TEXT,
-                assigned_employee TEXT,
-                status TEXT,
-                shift INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(allocation_id) REFERENCES allocations(id)
-            )
-        ''')
-
-
-        # Gas flow audit table - one row per machine/process per shift-block per date
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS gas_flow_audits (
-                id INTEGER PRIMARY KEY,
-                date DATE NOT NULL,
-                cell_id TEXT NOT NULL,
-                model_name TEXT,
-                process_name TEXT NOT NULL,
-                mc_no TEXT,
-                mc_name TEXT,
-                shift_block TEXT NOT NULL,
-                actual_flow REAL,
-                revised_flow REAL,
-                reading_name TEXT,
-                reason TEXT,
-                supervisor TEXT,
-                created_by INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(date, cell_id, process_name, mc_no, shift_block)
-            )
-        ''')
-
-        # Login sessions table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY,
-                user_id INTEGER,
-                token TEXT UNIQUE,
-                expires_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-        ''')
-
-        conn.commit()
-        self.insert_sample_data(cursor)
-        conn.close()
-
-    def insert_sample_data(self, cursor):
-        """Insert sample users and employees if they don't exist"""
-        try:
-            # Sample users
-            cursor.execute('SELECT COUNT(*) FROM users')
-            if cursor.fetchone()[0] == 0:
-                sample_users = [
-                    ('admin', self.hash_password('admin123'), 'admin', 'admin@elkayem.com'),
-                    ('supervisor', self.hash_password('super123'), 'supervisor', 'sup@elkayem.com'),
-                    ('operator', self.hash_password('oper123'), 'type1', 'op@elkayem.com'),
-                ]
-                cursor.executemany(
-                    'INSERT INTO users (username, password_hash, role, email) VALUES (?, ?, ?, ?)',
-                    sample_users
-                )
-
-            # Sample employees
-            cursor.execute('SELECT COUNT(*) FROM employees')
-            if cursor.fetchone()[0] == 0:
-                sample_employees = [
-                    ('Rajesh Kumar', 'Robot Op', 'rajesh@elkayem.com', '+91 9876543210', 'active'),
-                    ('Priya Singh', 'Welder', 'priya@elkayem.com', '+91 9876543211', 'active'),
-                    ('Amit Patel', 'Helper', 'amit@elkayem.com', '+91 9876543212', 'active'),
-                    ('Neha Sharma', 'Operator', 'neha@elkayem.com', '+91 9876543213', 'active'),
-                    ('Suresh Reddy', 'Robot Op', 'suresh@elkayem.com', '+91 9876543214', 'active'),
-                ]
-                cursor.executemany(
-                    'INSERT INTO employees (name, category, email, phone, status) VALUES (?, ?, ?, ?, ?)',
-                    sample_employees
-                )
-
-            # Use the cursor's connection to commit (init_db provides a local conn)
-            try:
-                cursor.connection.commit()
-            except Exception:
-                # Fallback: nothing to do if commit fails here
-                pass
-        except Exception as e:
-            print(f'  Sample data already exists or error: {e}')
+        cur.execute('SELECT COUNT(*) FROM employees')
+        if cur.fetchone()[0] == 0:
+            emps = [
+                ('Rajesh Kumar',   'Robot Op', '+91 9876543210', 'Robot Op, MIG Welding', 'active'),
+                ('Priya Singh',    'Welder',   '+91 9876543211', 'MIG Welding, TIG Welding', 'active'),
+                ('Amit Patel',     'Helper',   '+91 9876543212', 'Material Handling, Cleaning', 'active'),
+                ('Neha Sharma',    'Operator', '+91 9876543213', 'Boring, Revising, Inspection', 'active'),
+                ('Suresh Reddy',   'Robot Op', '+91 9876543214', 'Robot Op, FANUC', 'active'),
+                ('Meena Devi',     'Helper',   '+91 9876543215', 'Spatter Cleaning', 'active'),
+                ('Karthik Raja',   'Welder',   '+91 9876543216', 'Full Welding, Rework', 'active'),
+                ('Divya Lakshmi',  'Operator', '+91 9876543217', 'Gauge Inspection, Visual', 'active'),
+            ]
+            cur.executemany('INSERT INTO employees (name,category,phone,skills,status) VALUES (?,?,?,?,?)', emps)
+        c.commit()
 
     @staticmethod
-    def hash_password(password: str) -> str:
-        """Hash password using SHA-256"""
-        return hashlib.sha256(password.encode()).hexdigest()
+    def _hash(pw): return hashlib.sha256(pw.encode()).hexdigest()
 
-    def get_connection(self):
-        """Get database connection"""
-        return sqlite3.connect(self.db_path)
-
-    def query(self, sql: str, params: tuple = ()) -> List[Dict]:
-        """Execute SELECT query"""
-        conn = self.get_connection()
+    def _conn(self):
+        conn = sqlite3.connect(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(sql, params)
-        results = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return results
+        return conn
 
-    def execute(self, sql: str, params: tuple = ()) -> int:
-        """Execute INSERT/UPDATE/DELETE query"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(sql, params)
-        conn.commit()
-        last_id = cursor.lastrowid
-        conn.close()
-        return last_id
+    def query(self, sql, params=()):
+        c = self._conn()
+        cur = c.cursor(); cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+        c.close(); return rows
 
-    def authenticate_user(self, username: str, password: str) -> Optional[Dict]:
-        """Authenticate user"""
-        results = self.query(
-            'SELECT * FROM users WHERE username = ? AND password_hash = ? AND active = 1',
-            (username, self.hash_password(password))
-        )
-        return results[0] if results else None
+    def execute(self, sql, params=()):
+        c = self._conn()
+        cur = c.cursor(); cur.execute(sql, params)
+        c.commit(); lid = cur.lastrowid; c.close(); return lid
 
-    def get_user_by_id(self, user_id: int) -> Optional[Dict]:
-        """Get user by ID"""
-        results = self.query('SELECT * FROM users WHERE id = ?', (user_id,))
-        return results[0] if results else None
+    def executemany(self, sql, params_list):
+        c = self._conn()
+        cur = c.cursor(); cur.executemany(sql, params_list)
+        c.commit(); c.close()
 
-    def get_employees(self) -> List[Dict]:
-        """Get all employees"""
-        return self.query('SELECT * FROM employees ORDER BY name')
+    def auth(self, username, password):
+        r = self.query('SELECT * FROM users WHERE username=? AND password_hash=? AND active=1',
+                       (username, self._hash(password)))
+        return r[0] if r else None
 
-    def add_employee(self, name: str, category: str, email: str, phone: str, status: str) -> int:
-        """Add new employee"""
-        return self.execute(
-            'INSERT INTO employees (name, category, email, phone, status) VALUES (?, ?, ?, ?, ?)',
-            (name, category, email, phone, status)
-        )
-
-    def update_employee(self, emp_id: int, name: str, category: str, email: str, phone: str, status: str):
-        """Update employee"""
-        self.execute(
-            'UPDATE employees SET name=?, category=?, email=?, phone=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-            (name, category, email, phone, status, emp_id)
-        )
-
-    def delete_employee(self, emp_id: int):
-        """Delete employee"""
-        self.execute('DELETE FROM employees WHERE id=?', (emp_id,))
-
-    def save_allocation(self, cell_id: str, date: str, shift: int, rows: List[Dict], user_id: int):
-        """Save allocation data with pending approval status"""
-        for row in rows:
-            self.execute(
-                '''INSERT OR REPLACE INTO allocations 
-                   (cell_id, date, shift, process_name, category, plan_count, assigned_employee, status, approval_status, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                (
-                    cell_id, date, shift, row.get('process', ''), row.get('category', ''),
-                    row.get('plan', 1), row.get('assigned', ''), row.get('status', 'pending'), 'pending', user_id
-                )
-            )
-
-            # Log to history
-            self.execute(
-                '''INSERT INTO allocation_history 
-                   (date, cell_id, process_name, assigned_employee, status, shift)
-                   VALUES (?, ?, ?, ?, ?, ?)''',
-                (date, cell_id, row.get('process', ''), row.get('assigned', ''), row.get('status', 'pending'), shift)
-            )
-
-    def get_allocations(self, cell_id: Optional[str] = None, date: Optional[str] = None) -> List[Dict]:
-        """Get allocations"""
-        sql = 'SELECT * FROM allocations WHERE 1=1'
-        params = []
-
-        if cell_id:
-            sql += ' AND cell_id = ?'
-            params.append(cell_id)
-        if date:
-            sql += ' AND date = ?'
-            params.append(date)
-
-        return self.query(sql, tuple(params))
-
-
-    def save_gas_flow_audit(self, date: str, shift_block: str, rows: List[Dict], user_id: int):
-        """Save (or update) gas flow audit readings for one date + shift block"""
-        for row in rows:
-            self.execute(
-                '''INSERT OR REPLACE INTO gas_flow_audits
-                   (date, cell_id, model_name, process_name, mc_no, mc_name, shift_block,
-                    actual_flow, revised_flow, reading_name, reason, supervisor, created_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                (
-                    date, row.get('cell', ''), row.get('model', ''), row.get('process', ''),
-                    row.get('mcNo', ''), row.get('mcName', ''), shift_block,
-                    row.get('actualFlow'), row.get('revisedFlow'), row.get('name', ''),
-                    row.get('reason', ''), row.get('supervisor', ''), user_id
-                )
-            )
-
-    def get_gas_flow_audit(self, date: str) -> List[Dict]:
-        """Get all gas flow audit readings for a given date"""
-        return self.query(
-            'SELECT * FROM gas_flow_audits WHERE date = ?',
-            (date,)
-        )
-
-    def get_allocation_history(self, date: Optional[str] = None, cell_id: Optional[str] = None) -> List[Dict]:
-        """Get allocation history"""
-        sql = 'SELECT * FROM allocation_history WHERE 1=1'
-        params = []
-
-        if date:
-            sql += ' AND date = ?'
-            params.append(date)
-        if cell_id:
-            sql += ' AND cell_id = ?'
-            params.append(cell_id)
-
-        sql += ' ORDER BY created_at DESC LIMIT 500'
-        return self.query(sql, tuple(params))
-
-    def get_analytics(self) -> Dict:
-        """Get analytics data"""
-        total_employees = self.query('SELECT COUNT(*) as count FROM employees')[0]['count']
-        allocations_today = self.query(
-            'SELECT COUNT(*) as count FROM allocations WHERE date = ?',
-            (datetime.now().strftime('%Y-%m-%d'),)
-        )[0]['count']
-
-        allocated = self.query(
-            'SELECT COUNT(*) as count FROM allocations WHERE assigned_employee IS NOT NULL AND assigned_employee != ""'
-        )[0]['count']
-
-        avg_utilization = (allocated / max(1, allocations_today)) * 100 if allocations_today > 0 else 0
-
-        active_shifts = self.query(
-            'SELECT COUNT(DISTINCT shift) as count FROM allocations WHERE date = ?',
-            (datetime.now().strftime('%Y-%m-%d'),)
-        )[0]['count']
-
-        return {
-            'totalEmployees': total_employees,
-            'allocationsToday': allocations_today,
-            'avgUtilization': avg_utilization,
-            'activeShifts': active_shifts
-        }
-
-    def create_session(self, user_id: int) -> str:
-        """Create session token"""
+    def create_session(self, user_id):
         token = hashlib.sha256(f'{user_id}{time.time()}'.encode()).hexdigest()
-        expires_at = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-
-        self.execute(
-            'INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)',
-            (user_id, token, expires_at)
-        )
-
+        exp   = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+        self.execute('INSERT INTO sessions (user_id,token,expires_at) VALUES (?,?,?)',
+                     (user_id, token, exp))
         return token
 
-    def verify_token(self, token: str) -> Optional[int]:
-        """Verify session token and return user_id"""
-        results = self.query(
-            'SELECT user_id FROM sessions WHERE token = ? AND expires_at > CURRENT_TIMESTAMP',
-            (token,)
-        )
-        return results[0]['user_id'] if results else None
+    def verify_token(self, token):
+        r = self.query('SELECT user_id FROM sessions WHERE token=? AND expires_at>CURRENT_TIMESTAMP', (token,))
+        return r[0]['user_id'] if r else None
 
-    def get_pending_approvals(self) -> List[Dict]:
-        """Get allocations pending approval"""
-        return self.query(
-            '''SELECT * FROM allocations 
-               WHERE approval_status = 'pending' 
-               ORDER BY created_at DESC LIMIT 500'''
-        )
-
-    def approve_allocation(self, allocation_id: int, approved_by: int) -> bool:
-        """Approve allocation"""
-        try:
-            self.execute(
-                '''UPDATE allocations 
-                   SET approval_status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP
-                   WHERE id = ?''',
-                (approved_by, allocation_id)
-            )
-            return True
-        except Exception as e:
-            print(f"Error approving allocation: {e}")
-            return False
-
-    def reject_allocation(self, allocation_id: int, approved_by: int) -> bool:
-        """Reject allocation"""
-        try:
-            self.execute(
-                '''UPDATE allocations 
-                   SET approval_status = 'rejected', approved_by = ?, approved_at = CURRENT_TIMESTAMP
-                   WHERE id = ?''',
-                (approved_by, allocation_id)
-            )
-            return True
-        except Exception as e:
-            print(f"Error rejecting allocation: {e}")
-            return False
+    def get_user(self, uid):
+        r = self.query('SELECT * FROM users WHERE id=?', (uid,))
+        return r[0] if r else None
 
 
+# ══════════════════════════════════════════════════════════════
+# HTTP HANDLER
+# ══════════════════════════════════════════════════════════════
+class Handler(BaseHTTPRequestHandler):
+    db = DB(DB_FILE)
 
-class APIHandler(BaseHTTPRequestHandler):
-    db = Database(DB_FILE)
+    def log_message(self, fmt, *args):
+        print(f'  [{self.client_address[0]}] {fmt % args}')
 
-    def log_message(self, format, *args):
-        """Custom logging"""
-        client = self.client_address[0]
-        print(f"  [{client}] {format % args}")
-
-    def send_json_response(self, data: Dict, status: int = 200):
-        """Send JSON response"""
-        payload = json.dumps(data).encode('utf-8')
+    # ── helpers ──
+    def json_response(self, data, status=200):
+        body = json.dumps(data).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(payload)))
+        self.send_header('Content-Length', str(len(body)))
         self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        self.send_header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
         self.end_headers()
-        self.wfile.write(payload)
+        self.wfile.write(body)
 
-    def send_error_json(self, message: str, status: int = 400):
-        """Send error JSON response"""
-        self.send_json_response({'error': message, 'status': 'error'}, status)
+    def err(self, msg, status=400):
+        self.json_response({'error': msg}, status)
 
-    def get_auth_user(self) -> Optional[int]:
-        """Get authenticated user from token"""
-        auth_header = self.headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
-            token = auth_header[7:]
-            user_id = self.db.verify_token(token)
-            return user_id
+    def read_body(self):
+        n = int(self.headers.get('Content-Length', 0))
+        raw = self.rfile.read(n)
+        try:    return json.loads(raw)
+        except: return {}
+
+    def auth_user(self):
+        h = self.headers.get('Authorization', '')
+        if h.startswith('Bearer '):
+            uid = self.db.verify_token(h[7:])
+            if uid: return self.db.get_user(uid)
         return None
 
+    def serve_file(self, path):
+        if not os.path.isfile(path):
+            self.send_response(404); self.end_headers(); return
+        ext = os.path.splitext(path)[1]
+        ct  = {'html':'text/html','css':'text/css','js':'application/javascript','json':'application/json'}.get(ext.lstrip('.'), 'application/octet-stream')
+        with open(path, 'rb') as f: body = f.read()
+        self.send_response(200)
+        self.send_header('Content-Type', ct)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    # ── OPTIONS (CORS) ──
     def do_OPTIONS(self):
-        """Handle CORS preflight"""
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        self.send_header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
         self.end_headers()
 
+    # ══════════════════════════════════════════════════════════
+    # GET
+    # ══════════════════════════════════════════════════════════
+    def do_GET(self):
+        p = urlparse(self.path)
+        path, qs = p.path, parse_qs(p.query)
+
+        # Static files
+        if path in ('/', '/index.html', '/elkayem_v4.html'):
+            f = os.path.join(DIR, 'elkayem_v4.html')
+            if not os.path.isfile(f): f = os.path.join(DIR, 'index_advanced.html')
+            self.serve_file(f); return
+
+        # API routes requiring auth
+        user = self.auth_user()
+        if not user and path.startswith('/api/') and path != '/api/login':
+            self.err('Unauthorized', 401); return
+
+        # ── Employees ──
+        if path == '/api/employees':
+            self.json_response({'employees': self.db.query('SELECT * FROM employees ORDER BY name')}); return
+
+        # ── Allocations ──
+        if path == '/api/allocations':
+            cell = qs.get('cellId', [None])[0]
+            date = qs.get('date',   [None])[0]
+            sql  = 'SELECT * FROM allocations WHERE 1=1'
+            par  = []
+            if cell: sql += ' AND cell_id=?'; par.append(cell)
+            if date: sql += ' AND date=?';    par.append(date)
+            self.json_response({'allocations': self.db.query(sql, par)}); return
+
+        # ── Allocation history ──
+        if path == '/api/allocations/history':
+            date = qs.get('date',   [None])[0]
+            cell = qs.get('cellId', [None])[0]
+            sql  = 'SELECT * FROM allocation_history WHERE 1=1'
+            par  = []
+            if date: sql += ' AND date=?';  par.append(date)
+            if cell: sql += ' AND cell=?';  par.append('Cell '+cell)
+            sql += ' ORDER BY created_at DESC LIMIT 500'
+            self.json_response({'history': self.db.query(sql, par)}); return
+
+        # ── Pending approvals (admin only) ──
+        if path == '/api/allocations/pending':
+            if user['role'] != 'admin': self.err('Forbidden', 403); return
+            rows = self.db.query("SELECT * FROM allocations WHERE approval_status='pending' ORDER BY created_at DESC")
+            self.json_response({'pending': rows}); return
+
+        # ── Attendance ──
+        if path == '/api/attendance':
+            date  = qs.get('date',  [None])[0]
+            shift = qs.get('shift', [None])[0]
+            sql   = 'SELECT * FROM attendance WHERE 1=1'
+            par   = []
+            if date:  sql += ' AND date=?';  par.append(date)
+            if shift: sql += ' AND shift=?'; par.append(shift)
+            self.json_response({'attendance': self.db.query(sql, par)}); return
+
+        # ── OT Logs ──
+        if path == '/api/ot':
+            month = qs.get('month', [None])[0]
+            sql   = 'SELECT * FROM ot_logs WHERE 1=1'
+            par   = []
+            if month: sql += ' AND month=?'; par.append(month)
+            sql += ' ORDER BY date DESC'
+            self.json_response({'otLogs': self.db.query(sql, par)}); return
+
+        # ── Gas Flow ──
+        if path == '/api/gasflow':
+            date = qs.get('date', [None])[0]
+            sql  = 'SELECT * FROM gas_flow WHERE 1=1'
+            par  = []
+            if date: sql += ' AND date=?'; par.append(date)
+            self.json_response({'rows': self.db.query(sql, par)}); return
+
+        # ── Production Targets ──
+        if path == '/api/targets':
+            date  = qs.get('date',  [None])[0]
+            shift = qs.get('shift', [None])[0]
+            sql   = 'SELECT * FROM production_targets WHERE 1=1'
+            par   = []
+            if date:  sql += ' AND date=?';  par.append(date)
+            if shift: sql += ' AND shift=?'; par.append(shift)
+            self.json_response({'targets': self.db.query(sql, par)}); return
+
+        # ── Leaves ──
+        if path == '/api/leaves':
+            month = qs.get('month', [None])[0]
+            sql   = 'SELECT * FROM leaves WHERE 1=1'
+            par   = []
+            if month: sql += " AND strftime('%Y-%m', from_date)=?"; par.append(month)
+            sql += ' ORDER BY created_at DESC'
+            self.json_response({'leaves': self.db.query(sql, par)}); return
+
+        # ── Skills ──
+        if path == '/api/skills':
+            self.json_response({'skills': self.db.query('SELECT * FROM skills ORDER BY employee_name')}); return
+
+        # ── Analytics ──
+        if path == '/api/analytics':
+            today = datetime.now().strftime('%Y-%m-%d')
+            month = datetime.now().strftime('%Y-%m')
+            emp_count   = self.db.query('SELECT COUNT(*) as c FROM employees')[0]['c']
+            alloc_today = self.db.query('SELECT COUNT(*) as c FROM allocations WHERE date=?', (today,))[0]['c']
+            filled      = self.db.query("SELECT COUNT(*) as c FROM allocations WHERE date=? AND assigned_employee IS NOT NULL AND assigned_employee!=''", (today,))[0]['c']
+            ot_hours    = self.db.query("SELECT COALESCE(SUM(hours),0) as h FROM ot_logs WHERE month=?", (month,))[0]['h']
+            absent      = self.db.query("SELECT COUNT(*) as c FROM attendance WHERE date=? AND status='Absent'", (today,))[0]['c']
+            on_leave    = self.db.query("SELECT COUNT(*) as c FROM leaves WHERE status='Approved' AND from_date<=? AND to_date>=?", (today, today))[0]['c']
+            util        = round(filled / alloc_today * 100, 1) if alloc_today > 0 else 0
+            self.json_response({
+                'totalEmployees': emp_count, 'allocationsToday': alloc_today,
+                'avgUtilization': util, 'otHours': float(ot_hours),
+                'absentToday': absent, 'onLeave': on_leave
+            }); return
+
+        # ── Monthly Report ──
+        if path == '/api/reports/monthly':
+            month = qs.get('month', [datetime.now().strftime('%Y-%m')])[0]
+            rows  = []
+            for c in range(1, 12):
+                total  = self.db.query("SELECT COUNT(*) as n FROM allocations WHERE cell_id=? AND strftime('%Y-%m',date)=?", (str(c), month))[0]['n']
+                filled = self.db.query("SELECT COUNT(*) as n FROM allocations WHERE cell_id=? AND strftime('%Y-%m',date)=? AND assigned_employee!=''", (str(c), month))[0]['n']
+                absent = self.db.query("SELECT COUNT(*) as n FROM allocations WHERE cell_id=? AND strftime('%Y-%m',date)=? AND remark='Absent'", (str(c), month))[0]['n']
+                ot     = self.db.query("SELECT COALESCE(SUM(hours),0) as h FROM ot_logs WHERE cell=? AND month=?", (str(c), month))[0]['h']
+                util   = round(filled / total * 100, 1) if total > 0 else 0
+                rows.append({'cell': c, 'total': total, 'filled': filled, 'absent': absent, 'otHours': float(ot), 'util': util})
+            self.json_response({'month': month, 'rows': rows}); return
+
+        self.err('Not found', 404)
+
+    # ══════════════════════════════════════════════════════════
+    # POST
+    # ══════════════════════════════════════════════════════════
     def do_POST(self):
-        """Handle POST requests"""
-        parsed = urlparse(self.path)
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length)
+        p    = urlparse(self.path).path
+        data = self.read_body()
 
-        try:
-            data = json.loads(body) if body else {}
-        except:
-            self.send_error_json('Invalid JSON', 400)
-            return
-
-        # ── Login endpoint ──
-        if parsed.path == '/api/login':
-            username = data.get('username')
-            password = data.get('password')
-            requested_role = data.get('role')  # Frontend can request a role for testing (optional)
-
-            if not username or not password:
-                self.send_error_json('Username and password required', 400)
-                return
-
-            user = self.db.authenticate_user(username, password)
-            if not user:
-                self.send_error_json('Invalid credentials', 401)
-                return
-
-            # Default to the user's real database role. Only honor a
-            # client-requested role if one was actually sent AND it's a
-            # recognized role - never silently default everyone to
-            # 'supervisor' regardless of their real privileges.
-            if not requested_role or requested_role not in VALID_ROLES:
-                requested_role = user['role']
-
+        # ── Login ──
+        if p == '/api/login':
+            u, pw = data.get('username'), data.get('password')
+            if not u or not pw: self.err('Username and password required'); return
+            user = self.db.auth(u, pw)
+            if not user: self.err('Invalid credentials', 401); return
             token = self.db.create_session(user['id'])
-            self.send_json_response({
-                'status': 'ok',
-                'token': token,
-                'user': {
-                    'id': user['id'],
-                    'username': user['username'],
-                    'role': requested_role,  # Send the selected/validated role
-                    'email': user['email']
-                }
-            }, 200)
+            self.json_response({'status': 'ok', 'token': token, 'user': {
+                'id': user['id'], 'username': user['username'],
+                'role': user['role'], 'email': user['email']
+            }}); return
 
-        # ── Add Employee ──
-        elif parsed.path == '/api/employees':
-            user_id = self.get_auth_user()
-            if not user_id:
-                self.send_error_json('Unauthorized', 401)
-                return
+        user = self.auth_user()
+        if not user: self.err('Unauthorized', 401); return
 
-            emp_id = self.db.add_employee(
-                data.get('name'),
-                data.get('category'),
-                data.get('email'),
-                data.get('phone'),
-                data.get('status', 'active')
-            )
+        # ── Save Employee ──
+        if p == '/api/employees':
+            eid = self.db.execute(
+                'INSERT INTO employees (name,category,phone,skills,status) VALUES (?,?,?,?,?)',
+                (data.get('name'), data.get('category'), data.get('phone'),
+                 data.get('skills'), data.get('status', 'active')))
+            self.json_response({'id': eid}, 201); return
 
-            self.send_json_response({'status': 'ok', 'id': emp_id}, 201)
+        # ── Save Allocation batch ──
+        if p == '/api/allocations':
+            cid   = data.get('cellId')
+            date  = data.get('date')
+            shift = data.get('shift', 1)
+            rows  = data.get('rows', [])
+            for r in rows:
+                self.db.execute(
+                    '''INSERT OR REPLACE INTO allocations
+                       (cell_id,date,shift,process_name,category,plan_count,
+                        assigned_employee,remark,status,created_by)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                    (cid, date, shift, r.get('process',''), r.get('category',''),
+                     r.get('plan',1), r.get('assigned',''), r.get('remark',''),
+                     r.get('status','pending'), user['id']))
+                # history
+                if r.get('assigned','').strip():
+                    self.db.execute(
+                        'INSERT INTO allocation_history (date,cell,employee,process_name,shift,status) VALUES (?,?,?,?,?,?)',
+                        (date, 'Cell '+str(cid), r.get('assigned',''), r.get('process',''), 'Shift '+str(shift), r.get('status','pending')))
+            self.json_response({'status': 'ok', 'saved': len(rows)}); return
 
-        # ── Save Allocations ──
-        elif parsed.path == '/api/allocations':
-            user_id = self.get_auth_user()
-            if not user_id:
-                self.send_error_json('Unauthorized', 401)
-                return
+        # ── Save Attendance ──
+        if p == '/api/attendance':
+            date  = data.get('date')
+            shift = data.get('shift', 1)
+            rows  = data.get('rows', [])
+            for r in rows:
+                self.db.execute(
+                    '''INSERT OR REPLACE INTO attendance
+                       (date,shift,employee_name,process_name,cell,clock_in,clock_out,status)
+                       VALUES (?,?,?,?,?,?,?,?)''',
+                    (date, shift, r.get('name',''), r.get('process',''),
+                     r.get('cell',''), r.get('clockIn',''), r.get('clockOut',''), r.get('status','Present')))
+            self.json_response({'status': 'ok'}); return
 
-            self.db.save_allocation(
-                data.get('cellId'),
-                data.get('date'),
-                data.get('shift', 1),
-                data.get('rows', []),
-                user_id
-            )
+        # ── Save OT ──
+        if p == '/api/ot':
+            month = data.get('month')
+            rows  = data.get('rows', [])
+            # clear existing for this month first
+            self.db.execute('DELETE FROM ot_logs WHERE month=?', (month,))
+            for r in rows:
+                self.db.execute(
+                    'INSERT INTO ot_logs (employee_name,cell,date,hours,reason,approved,month) VALUES (?,?,?,?,?,?,?)',
+                    (r.get('name',''), r.get('cell',''), r.get('date',''),
+                     r.get('hours',0), r.get('reason',''), r.get('approved','pending'), month))
+            self.json_response({'status': 'ok'}); return
 
-            self.send_json_response({'status': 'ok', 'message': 'Allocation saved'}, 200)
+        # ── Save Gas Flow ──
+        if p == '/api/gasflow':
+            date       = data.get('date')
+            shift_block = data.get('shiftBlock')
+            rows       = data.get('rows', [])
+            for r in rows:
+                self.db.execute(
+                    '''INSERT OR REPLACE INTO gas_flow
+                       (date,shift_block,cell,model,process_name,mc_no,mc_name,
+                        actual_flow,revised_flow,reading_name,reason,supervisor)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (date, shift_block, r.get('cell'), r.get('model'), r.get('process'),
+                     r.get('mcNo',''), r.get('mcName',''), r.get('actualFlow'),
+                     r.get('revisedFlow'), r.get('name',''), r.get('reason',''), r.get('supervisor','')))
+            self.json_response({'status': 'ok'}); return
 
+        # ── Save Targets ──
+        if p == '/api/targets':
+            date  = data.get('date')
+            shift = data.get('shift', 1)
+            rows  = data.get('rows', [])
+            for r in rows:
+                self.db.execute(
+                    '''INSERT OR REPLACE INTO production_targets
+                       (date,shift,cell,product,target,actual)
+                       VALUES (?,?,?,?,?,?)''',
+                    (date, shift, r.get('cell'), r.get('product',''),
+                     r.get('target',0), r.get('actual',0)))
+            self.json_response({'status': 'ok'}); return
 
-        # ── Save Gas Flow Audit ──
-        elif parsed.path == '/api/gasflow':
-            user_id = self.get_auth_user()
-            if not user_id:
-                self.send_error_json('Unauthorized', 401)
-                return
+        # ── Apply Leave ──
+        if p == '/api/leaves':
+            lid = self.db.execute(
+                'INSERT INTO leaves (employee_name,leave_type,from_date,to_date,days,reason,status) VALUES (?,?,?,?,?,?,?)',
+                (data.get('emp',''), data.get('type','Casual'),
+                 data.get('from'), data.get('to'), data.get('days',1),
+                 data.get('reason',''), data.get('status','Pending')))
+            self.json_response({'id': lid}, 201); return
 
-            self.db.save_gas_flow_audit(
-                data.get('date'),
-                data.get('shiftBlock'),
-                data.get('rows', []),
-                user_id
-            )
+        # ── Save Skills ──
+        if p == '/api/skills':
+            self.db.execute(
+                '''INSERT OR REPLACE INTO skills
+                   (employee_name,skill_list,experience,score,updated_at)
+                   VALUES (?,?,?,?,CURRENT_TIMESTAMP)''',
+                (data.get('employeeName'), data.get('skills',''),
+                 data.get('exp',1), data.get('score',7)))
+            self.json_response({'status': 'ok'}); return
 
-            self.send_json_response(
-                {'status': 'ok', 'message': 'Gas flow audit saved'},
-                200
-            )
+        self.err('Not found', 404)
 
-        else:
-            self.send_error_json('Not found', 404)
-
+    # ══════════════════════════════════════════════════════════
+    # PUT
+    # ══════════════════════════════════════════════════════════
     def do_PUT(self):
-        """Handle PUT requests"""
-        parsed = urlparse(self.path)
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length)
-
-        try:
-            data = json.loads(body) if body else {}
-        except:
-            self.send_error_json('Invalid JSON', 400)
-            return
-
-        user_id = self.get_auth_user()
-        if not user_id:
-            self.send_error_json('Unauthorized', 401)
-            return
+        p    = urlparse(self.path).path
+        data = self.read_body()
+        user = self.auth_user()
+        if not user: self.err('Unauthorized', 401); return
 
         # ── Update Employee ──
-        if parsed.path.startswith('/api/employees/'):
-            emp_id = int(parsed.path.split('/')[-1])
-            self.db.update_employee(
-                emp_id,
-                data.get('name'),
-                data.get('category'),
-                data.get('email'),
-                data.get('phone'),
-                data.get('status', 'active')
-            )
-            self.send_json_response({'status': 'ok'}, 200)
+        if p.startswith('/api/employees/'):
+            eid = p.split('/')[-1]
+            self.db.execute(
+                'UPDATE employees SET name=?,category=?,phone=?,skills=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                (data.get('name'), data.get('category'), data.get('phone'),
+                 data.get('skills',''), data.get('status','active'), eid))
+            self.json_response({'status': 'ok'}); return
 
         # ── Approve Allocation ──
-        elif parsed.path.startswith('/api/allocations/approve/'):
-            user = self.db.get_user_by_id(user_id)
-            if user['role'] != 'admin':
-                self.send_error_json('Admin access required', 403)
-                return
-            allocation_id = int(parsed.path.split('/')[-1])
-            success = self.db.approve_allocation(allocation_id, user_id)
-            if success:
-                self.send_json_response({'status': 'ok', 'message': 'Allocation approved'}, 200)
-            else:
-                self.send_error_json('Failed to approve', 500)
+        if p.startswith('/api/allocations/approve/'):
+            if user['role'] != 'admin': self.err('Forbidden', 403); return
+            aid = p.split('/')[-1]
+            self.db.execute("UPDATE allocations SET approval_status='approved' WHERE id=?", (aid,))
+            self.json_response({'status': 'ok'}); return
 
         # ── Reject Allocation ──
-        elif parsed.path.startswith('/api/allocations/reject/'):
-            user = self.db.get_user_by_id(user_id)
-            if user['role'] != 'admin':
-                self.send_error_json('Admin access required', 403)
-                return
-            allocation_id = int(parsed.path.split('/')[-1])
-            success = self.db.reject_allocation(allocation_id, user_id)
-            if success:
-                self.send_json_response({'status': 'ok', 'message': 'Allocation rejected'}, 200)
-            else:
-                self.send_error_json('Failed to reject', 500)
+        if p.startswith('/api/allocations/reject/'):
+            if user['role'] != 'admin': self.err('Forbidden', 403); return
+            aid = p.split('/')[-1]
+            self.db.execute("UPDATE allocations SET approval_status='rejected' WHERE id=?", (aid,))
+            self.json_response({'status': 'ok'}); return
 
-        else:
-            self.send_error_json('Not found', 404)
+        # ── Update Leave Status ──
+        if p.startswith('/api/leaves/'):
+            lid    = p.split('/')[-2] if p.endswith('/approve') or p.endswith('/reject') else p.split('/')[-1]
+            status = 'Approved' if p.endswith('/approve') else 'Rejected' if p.endswith('/reject') else data.get('status','Pending')
+            self.db.execute('UPDATE leaves SET status=? WHERE id=?', (status, lid))
+            self.json_response({'status': 'ok'}); return
 
+        self.err('Not found', 404)
+
+    # ══════════════════════════════════════════════════════════
+    # DELETE
+    # ══════════════════════════════════════════════════════════
     def do_DELETE(self):
-        """Handle DELETE requests"""
-        parsed = urlparse(self.path)
+        p    = urlparse(self.path).path
+        user = self.auth_user()
+        if not user: self.err('Unauthorized', 401); return
 
-        user_id = self.get_auth_user()
-        if not user_id:
-            self.send_error_json('Unauthorized', 401)
-            return
+        if p.startswith('/api/employees/'):
+            eid = p.split('/')[-1]
+            self.db.execute('DELETE FROM employees WHERE id=?', (eid,))
+            self.json_response({'status': 'ok'}); return
 
-        # ── Delete Employee ──
-        if parsed.path.startswith('/api/employees/'):
-            emp_id = int(parsed.path.split('/')[-1])
-            self.db.delete_employee(emp_id)
-            self.send_json_response({'status': 'ok'}, 200)
-        else:
-            self.send_error_json('Not found', 404)
+        if p.startswith('/api/leaves/'):
+            lid = p.split('/')[-1]
+            self.db.execute('DELETE FROM leaves WHERE id=?', (lid,))
+            self.json_response({'status': 'ok'}); return
 
-    def do_GET(self):
-        """Handle GET requests"""
-        parsed = urlparse(self.path)
-        query_params = parse_qs(parsed.query)
-
-        user_id = self.get_auth_user()
-        if not user_id:
-            # Allow static file serving
-            if parsed.path in ['/', '/index.html']:
-                self.serve_static(parsed.path)
-                return
-            self.send_error_json('Unauthorized', 401)
-            return
-
-        # ── Get Employees ──
-        if parsed.path == '/api/employees':
-            employees = self.db.get_employees()
-            self.send_json_response({'employees': employees}, 200)
-
-        # ── Get Allocations ──
-        elif parsed.path == '/api/allocations':
-            cell_id = query_params.get('cellId', [None])[0]
-            date = query_params.get('date', [None])[0]
-            allocations = self.db.get_allocations(cell_id, date)
-            self.send_json_response({'allocations': allocations}, 200)
+        self.err('Not found', 404)
 
 
-        # ── Get Gas Flow Audit ──
-        elif parsed.path == '/api/gasflow':
-            date = query_params.get('date', [None])[0]
-            rows = self.db.get_gas_flow_audit(date)
-            self.send_json_response({'rows': rows}, 200)
-
-        # ── Get Pending Approvals (Admin Only) ──
-        elif parsed.path == '/api/allocations/pending':
-            user = self.db.get_user_by_id(user_id)
-            if user['role'] != 'admin':
-                self.send_error_json('Admin access required', 403)
-                return
-            pending = self.db.get_pending_approvals()
-            self.send_json_response({'pending': pending}, 200)
-
-        # ── Get Allocation History ──
-        elif parsed.path == '/api/allocations/history':
-            date = query_params.get('date', [None])[0]
-            cell_id = query_params.get('cellId', [None])[0]
-            history = self.db.get_allocation_history(date, cell_id)
-            self.send_json_response({'history': history}, 200)
-
-        # ── Get Analytics ──
-        elif parsed.path == '/api/analytics':
-            analytics = self.db.get_analytics()
-            self.send_json_response(analytics, 200)
-
-        # ── Serve Static Files ──
-        else:
-            self.serve_static(parsed.path)
-
-    def serve_static(self, path):
-        """Serve static files"""
-        if path == '/' or path == '/index.html':
-            file_path = os.path.join(DIRECTORY, 'index_advanced.html')
-        else:
-            # SECURITY: resolve the requested path and verify it stays
-            # inside DIRECTORY before touching the filesystem. Without
-            # this check, a path like /../server_advanced.py or
-            # /../elkayem.db lets an authenticated user read any file
-            # on the server (source code, secrets, the database).
-            requested = os.path.normpath(path.lstrip('/'))
-            if requested.startswith('..') or os.path.isabs(requested):
-                self.send_response(403)
-                self.end_headers()
-                return
-            base = os.path.realpath(DIRECTORY)
-            file_path = os.path.realpath(os.path.join(base, requested))
-            if not (file_path == base or file_path.startswith(base + os.sep)):
-                self.send_response(403)
-                self.end_headers()
-                return
-            # SECURITY: don't blindly serve every file that happens to
-            # live next to the server (source code, .db, .md docs,
-            # start scripts, etc.) - only allow real static-asset
-            # extensions. This is a whitelist, not a blacklist, so new
-            # sensitive files added later are safe by default.
-            ALLOWED_EXTENSIONS = ('.html', '.css', '.js', '.png', '.jpg',
-                                   '.jpeg', '.svg', '.ico', '.woff', '.woff2')
-            if not file_path.lower().endswith(ALLOWED_EXTENSIONS):
-                self.send_response(403)
-                self.end_headers()
-                return
-
-        if not os.path.exists(file_path) or not os.path.isfile(file_path):
-            self.send_response(404)
-            self.end_headers()
-            return
-
-        try:
-            with open(file_path, 'rb') as f:
-                content = f.read()
-
-            content_type = 'text/html'
-            if file_path.endswith('.css'):
-                content_type = 'text/css'
-            elif file_path.endswith('.js'):
-                content_type = 'application/javascript'
-
-            self.send_response(200)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Content-Length', str(len(content)))
-            self.end_headers()
-            self.wfile.write(content)
-        except Exception as e:
-            self.send_response(500)
-            self.end_headers()
-            print(f'  Error serving file: {e}')
-
-
-def get_local_ip():
-    """Get local network IP"""
+# ══════════════════════════════════════════════════════════════
+# STARTUP
+# ══════════════════════════════════════════════════════════════
+def get_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except:
-        return "127.0.0.1"
+        s.connect(('8.8.8.8', 80)); ip = s.getsockname()[0]; s.close(); return ip
+    except: return '127.0.0.1'
 
-
-if __name__ == "__main__":
-    local_ip = get_local_ip()
-    is_cloud = 'RENDER' in os.environ  # Detect Render.com environment
-    
-    print("=" * 60)
-    print("  ELKAYEM ADVANCED MANPOWER ALLOCATION SERVER")
-    print("=" * 60)
-    print(f"  Database:  {DB_FILE}")
-    if is_cloud:
-        print(f"  🌐 Cloud Deployed (Render.com)")
-        print(f"  Access at: https://YOUR-APP-NAME.onrender.com")
-    else:
-        print(f"  Local:     http://localhost:{PORT}")
-        print(f"  Network:   http://{local_ip}:{PORT}")
-    print("=" * 60)
-    print("  Default Credentials:")
-    print("    Username: admin, Password: admin123")
-    print("    Username: supervisor, Password: super123")
-    print("  Change credentials in database after first login!")
-    print("=" * 60)
-    print("  Press Ctrl+C to stop the server")
+if __name__ == '__main__':
+    ip = get_ip()
+    print('=' * 60)
+    print('  ELKAYEM MANPOWER ALLOCATION SERVER v4')
+    print('=' * 60)
+    print(f'  Database : {DB_FILE}')
+    print(f'  Local    : http://localhost:{PORT}')
+    print(f'  Network  : http://{ip}:{PORT}')
+    print('=' * 60)
+    print('  Default Logins:')
+    print('    admin      / admin123  (full access)')
+    print('    supervisor / super123  (manage allocations)')
+    print('    operator   / oper123   (view only)')
+    print('=' * 60)
+    print('  API Endpoints:')
+    print('    POST /api/login')
+    print('    GET/POST /api/employees')
+    print('    GET/POST /api/allocations')
+    print('    GET/POST /api/attendance')
+    print('    GET/POST /api/ot')
+    print('    GET/POST /api/gasflow')
+    print('    GET/POST /api/targets')
+    print('    GET/POST /api/leaves')
+    print('    GET/POST /api/skills')
+    print('    GET      /api/analytics')
+    print('    GET      /api/reports/monthly')
+    print('=' * 60)
+    print('  Press Ctrl+C to stop')
     print()
 
-    server = HTTPServer(("", PORT), APIHandler)
+    server = HTTPServer(('', PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n  Server stopped.")
+        print('\n  Server stopped.')
