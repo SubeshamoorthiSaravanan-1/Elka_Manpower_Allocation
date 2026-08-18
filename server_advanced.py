@@ -537,7 +537,9 @@ class Database:
 # HTTP HANDLER
 # ════════════════════════════════════════════════════════════
 class APIHandler(BaseHTTPRequestHandler):
-    db = Database(DB_FILE)
+    # db = Database(DB_FILE)
+  from supabase_db import SupabaseDatabase
+db = SupabaseDatabase()
 
     def log_message(self, format, *args):
         client = self.client_address[0]
